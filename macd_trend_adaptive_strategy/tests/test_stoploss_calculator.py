@@ -14,13 +14,12 @@ def test_calculate_dynamic_stoploss(stoploss_calculator, regime_detector):
     stoploss_calculator.config.min_stoploss = -0.01
 
     # Set max_stoploss to be high to avoid upper clamping
-    stoploss_calculator.config.max_stoploss = -0.1
+    stoploss_calculator.config.max_stoploss = -0.3
 
     # Test with various ROI values
     roi_values = [0.02, 0.05, 0.1]
 
     for roi in roi_values:
-        print(f"\nTesting with ROI: {roi}")
         # Force a bullish regime
         regime_detector.detect_regime = lambda: "bullish"
         # Ensure the is_counter_trend and is_aligned_trend methods work as expected
@@ -32,33 +31,27 @@ def test_calculate_dynamic_stoploss(stoploss_calculator, regime_detector):
 
         # Calculate the base stoploss and expected values for debugging
         base_stoploss = -1 * roi * stoploss_calculator.config.risk_reward_ratio
-        print(f"Base stoploss: {base_stoploss}")
 
         # Expected values before clamping
         raw_long_sl = base_stoploss * stoploss_calculator.config.aligned_trend_stoploss_factor
         raw_short_sl = base_stoploss * stoploss_calculator.config.counter_trend_stoploss_factor
-        print(f"Raw long SL: {raw_long_sl}, Raw short SL: {raw_short_sl}")
 
         # Get stoploss for aligned trend (long in bullish)
         long_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "long")
-        print(f"Final long SL: {long_sl}")
 
         # Get stoploss for counter trend (short in bullish)
         short_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "short")
-        print(f"Final short SL: {short_sl}")
-
-        # Print bounds
-        print(f"Min stoploss: {stoploss_calculator.config.min_stoploss}")
-        print(f"Max stoploss: {stoploss_calculator.config.max_stoploss}")
 
         # Stoploss should be negative
         assert long_sl < 0
         assert short_sl < 0
 
         # Counter trend stoploss should be tighter (less negative)
-        assert short_sl > long_sl, f"Short SL ({short_sl}) should be > Long SL ({long_sl})"
+        assert short_sl > long_sl, (f"Short SL ({short_sl}) should be > Long SL ({long_sl}), "
+                                    f"check clamping - (short: {raw_short_sl}), (long: {raw_long_sl})")
 
         # Check that stoploss is within bounds
+        # this is tricky as stoplosses are negatives, so we cast them to absolute values so it is easier to read
         assert abs(long_sl) >= abs(stoploss_calculator.config.min_stoploss)
         assert abs(long_sl) <= abs(stoploss_calculator.config.max_stoploss)
         assert abs(short_sl) >= abs(stoploss_calculator.config.min_stoploss)
@@ -69,18 +62,20 @@ def test_calculate_dynamic_stoploss(stoploss_calculator, regime_detector):
 
         # Long in bullish = aligned trend factor
         expected_long_sl = base_stoploss * stoploss_calculator.config.aligned_trend_stoploss_factor
+
         # Clamp to bounds
-        expected_long_sl = max(
+        expected_long_sl = min(
             stoploss_calculator.config.min_stoploss,
-            min(expected_long_sl, stoploss_calculator.config.max_stoploss)
+            max(expected_long_sl, stoploss_calculator.config.max_stoploss),
         )
 
         # Short in bullish = counter trend factor
         expected_short_sl = base_stoploss * stoploss_calculator.config.counter_trend_stoploss_factor
+
         # Clamp to bounds
-        expected_short_sl = max(
+        expected_short_sl = min(
             stoploss_calculator.config.min_stoploss,
-            min(expected_short_sl, stoploss_calculator.config.max_stoploss)
+            max(expected_short_sl, stoploss_calculator.config.max_stoploss)
         )
 
         assert abs(long_sl - expected_long_sl) < 0.0001
