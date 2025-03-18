@@ -137,7 +137,7 @@ class StrategyConfig:
             # Set timeframe
             self.timeframe = '1m'
 
-            # Update indicator settings
+            # Update indicator settings from TimeframeConfig
             indicator_settings = TimeframeConfig.get_indicator_settings('1m')
             self.fast_length = indicator_settings['fast_length']
             self.slow_length = indicator_settings['slow_length']
@@ -149,25 +149,34 @@ class StrategyConfig:
             self.startup_candle_count = indicator_settings['startup_candle_count']
             self.roi_cache_update_interval = indicator_settings['roi_cache_update_interval']
 
-            # 1m-specific strategy parameters
-            self.base_roi = 0.02  # Lower ROI targets for shorter timeframe
-            self.min_roi = 0.01
-            self.max_roi = 0.04
-            self.static_stoploss = -0.02  # Tighter stoploss
-            self.risk_reward_ratio = 0.5  # 1:2 risk:reward for faster timeframe
-            self.min_stoploss = -0.01
-            self.max_stoploss = -0.05
-            self.counter_trend_factor = 0.4
-            self.aligned_trend_factor = 0.7
-            self.counter_trend_stoploss_factor = 1.5
-            self.aligned_trend_stoploss_factor = 0.7
-            self.min_win_rate = 0.35
-            self.max_win_rate = 0.75
+            # 1m-specific strategy parameters with improved risk-reward
+            # For 1:1.5 risk-reward with 10x leverage
+            self.base_roi = 0.03  # 3% price movement = ~30% profit with leverage
+            self.min_roi = 0.02  # Minimum 2% price movement
+            self.max_roi = 0.04  # Maximum 4% price movement
+
+            # Stoploss settings
+            self.static_stoploss = -0.02  # 2% price movement = ~20% loss with leverage
+            self.risk_reward_ratio = 0.67  # 1:1.5 risk:reward
+            self.min_stoploss = -0.015  # Tightest stoploss (1.5% price movement)
+            self.max_stoploss = -0.025  # Widest stoploss (2.5% price movement)
+
+            # Adjustment factors
+            self.counter_trend_factor = 0.7  # Take profits faster for counter-trend
+            self.aligned_trend_factor = 1.3  # Allow more room for profit in aligned trends
+            self.counter_trend_stoploss_factor = 0.8  # Tighter stoploss for counter-trend
+            self.aligned_trend_stoploss_factor = 1.1  # Slightly looser stoploss for aligned trend
+
+            # Win rate settings
+            self.min_win_rate = 0.4
+            self.max_win_rate = 0.7
             self.min_recent_trades_per_direction = 5
             self.regime_win_rate_diff = 0.1
             self.max_recent_trades = 20
-            self.default_roi = 0.1
-            self.long_roi_boost = 0.005
+
+            # Default ROI settings
+            self.default_roi = 0.025  # Default ROI target
+            self.long_roi_boost = 0.005  # Small boost for long trades
             self.use_default_roi_exit = True
             self.use_dynamic_stoploss = True
 

@@ -281,8 +281,11 @@ class MACDTrendAdaptiveStrategy(IStrategy):
             return [ExitCheckTuple(exit_type=ExitType.STOP_LOSS,
                                    exit_reason=f"stoploss_{direction}_{trade_params['regime']}")]
 
+        # De-leverage for correct comparison with profit targets
+        adjusted_profit = current_profit / trade.leverage
+
         # Check for ROI exit (take profit)
-        if current_profit >= trade_params['roi']:
+        if adjusted_profit >= trade_params['roi']:
             trade_type = ("countertrend" if trade_params['is_counter_trend']
                           else "aligned" if trade_params['is_aligned_trend']
             else "neutral")
