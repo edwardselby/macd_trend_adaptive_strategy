@@ -180,7 +180,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         its initial dynamic stoploss.
         """
         trade_id = create_trade_id(pair, current_time)
-        is_short = side == 'sell'
+        is_short = side == 'short'
 
         # Get or create trade cache entry
         cache_entry = self._get_or_create_trade_cache(
@@ -255,11 +255,17 @@ class MACDTrendAdaptiveStrategy(IStrategy):
             trade_id, trade.pair, trade.open_rate, trade.open_date_utc, trade.is_short
         )
 
-        # Check for stoploss hit - Note we're now doing this check in should_exit instead of custom_stoploss
-        # For long positions: current_profit <= stoploss (negative value)
-        # For short positions: current_profit <= stoploss (negative value) as well
-        if current_profit <= trade_params['stoploss']:
+        # Check for stoploss hit - using price-based comparison instead of profit ratio
+        if (not trade.is_short and rate <= trade_params['stoploss_price']) or \
+                (trade.is_short and rate >= trade_params['stoploss_price']):
             direction = trade_params['direction']
+
+            # Log additional debugging info
+            logger.debug(
+                f"Stoploss hit: Direction={direction}, is_short={trade.is_short}, "
+                f"Current price={rate}, Stoploss price={trade_params['stoploss_price']}, "
+                f"Entry price={trade.open_rate}, Profit ratio={current_profit:.4%}"
+            )
 
             # Use the appropriate log function for stoploss hit
             log_stoploss_hit(
