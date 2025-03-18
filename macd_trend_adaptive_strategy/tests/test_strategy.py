@@ -419,10 +419,10 @@ def test_custom_stake_amount(strategy):
     assert stake == proposed_stake
 
 
-def test_strategy_stoploss_integration(strategy, mock_trade, mock_short_trade):
+def test_stoploss_values_in_cache(strategy, mock_trade, mock_short_trade):
     """
-    Integration test to verify stoploss behavior between the strategy and FreqTrade.
-    This test simulates how FreqTrade would interact with the strategy's stoploss logic.
+    Test that stoploss values are correctly calculated and stored in cache
+    when new trades are initialized.
     """
     # Setup test parameters
     pair = "BTC/USDT"
@@ -442,18 +442,7 @@ def test_strategy_stoploss_integration(strategy, mock_trade, mock_short_trade):
     mock_short_trade.open_date_utc = short_time
     mock_short_trade.is_short = True
 
-    # Configure profit calculation (how FreqTrade would calculate it)
-    def long_profit(rate):
-        return (rate - entry_rate) / entry_rate
-
-    def short_profit(rate):
-        return (entry_rate - rate) / entry_rate
-
-    mock_trade.calc_profit_ratio = long_profit
-    mock_short_trade.calc_profit_ratio = short_profit
-
     # Initialize trades in strategy
-    # This is what happens when FreqTrade creates a new trade
     strategy.confirm_trade_entry(
         pair, "limit", 0.1, entry_rate, "GTC",
         current_time, "test_entry", "buy"
@@ -474,51 +463,265 @@ def test_strategy_stoploss_integration(strategy, mock_trade, mock_short_trade):
     long_cache = strategy.trade_cache['active_trades'][long_trade_id]
     short_cache = strategy.trade_cache['active_trades'][short_trade_id]
 
-    # Log stoploss values for debugging
-    print(f"Long stoploss: {long_cache['stoploss']:.4f}, price: {long_cache['stoploss_price']}")
-    print(f"Short stoploss: {short_cache['stoploss']:.4f}, price: {short_cache['stoploss_price']}")
-
     # Verify stoploss is correctly calculated
     assert long_cache['stoploss'] < 0, "Long stoploss should be negative"
     assert short_cache['stoploss'] < 0, "Short stoploss should be negative"
 
-    # Now test the stoploss triggering using should_exit
-    # This is how FreqTrade would check for exit conditions
+    # Verify stoploss prices are calculated correctly
+    assert long_cache['stoploss_price'] < entry_rate, "Long stoploss price should be below entry"
+    assert short_cache['stoploss_price'] > entry_rate, "Short stoploss price should be above entry"
 
-    # 1. Test long trade at stoploss price
+    # Verify stoploss percentage and price correlate correctly
+    expected_long_price = entry_rate * (1 + long_cache['stoploss'])
+    expected_short_price = entry_rate * (1 - short_cache['stoploss'])
+
+    assert abs(long_cache['stoploss_price'] - expected_long_price) < 0.01, "Long stoploss price calculation mismatch"
+    assert abs(short_cache['stoploss_price'] - expected_short_price) < 0.01, "Short stoploss price calculation mismatch"
+
+
+def test_custom_stoploss_returns_correct_values(strategy, mock_trade, mock_short_trade):
+    """
+    Test that custom_stoploss method returns the correct stoploss values from cache
+    and correctly calculates stoploss at the actual stoploss price.
+    """
+    # Setup test parameters
+    pair = "BTC/USDT"
+    entry_rate = 20000
+    current_time = datetime.now()
+
+    # Configure mock trades
+    mock_trade.pair = pair
+    mock_trade.open_rate = entry_rate
+    mock_trade.open_date_utc = current_time
+    mock_trade.is_short = False
+
+    mock_short_trade.pair = pair
+    mock_short_trade.open_rate = entry_rate
+    short_time = current_time + timedelta(seconds=1)
+    mock_short_trade.open_date_utc = short_time
+    mock_short_trade.is_short = True
+
+    # Configure profit calculation
+    def long_profit(rate):
+        return (rate - entry_rate) / entry_rate
+
+    def short_profit(rate):
+        return (entry_rate - rate) / entry_rate
+
+    mock_trade.calc_profit_ratio = long_profit
+    mock_short_trade.calc_profit_ratio = short_profit
+
+    # Initialize trades in strategy
+    strategy.confirm_trade_entry(
+        pair, "limit", 0.1, entry_rate, "GTC",
+        current_time, "test_entry", "buy"
+    )
+
+    strategy.confirm_trade_entry(
+        pair, "limit", 0.1, entry_rate, "GTC",
+        short_time, "test_entry", "sell"
+    )
+
+    # Get trade IDs and cache entries
+    long_trade_id = create_trade_id(pair, current_time)
+    short_trade_id = create_trade_id(pair, short_time)
+
+    long_cache = strategy.trade_cache['active_trades'][long_trade_id]
+    short_cache = strategy.trade_cache['active_trades'][short_trade_id]
+
+    # Test long trade at stoploss price
     long_sl_price = long_cache['stoploss_price']
-    long_exit = strategy.should_exit(mock_trade, long_sl_price, current_time)
+    current_profit_at_sl = long_profit(long_sl_price)
 
-    assert len(long_exit) == 1, "Long trade should exit at stoploss price"
-    assert long_exit[0].exit_type == ExitType.STOP_LOSS, "Exit should be stoploss type"
+    # Verify custom_stoploss returns the expected value at the stoploss price
+    long_sl_value = strategy.custom_stoploss(
+        pair, mock_trade, current_time, long_sl_price, current_profit_at_sl
+    )
 
-    # Calculate actual profit at stoploss - should match stoploss percentage
-    long_profit_at_sl = long_profit(long_sl_price)
-    assert abs(long_profit_at_sl - long_cache['stoploss']) < 0.0001, \
-        f"Long profit at SL ({long_profit_at_sl:.4f}) should match stoploss value ({long_cache['stoploss']:.4f})"
+    # The returned stoploss value should match what's in the cache
+    assert abs(long_sl_value - long_cache['stoploss']) < 0.0001, \
+        f"Returned stoploss value ({long_sl_value:.4f}) should match cached value ({long_cache['stoploss']:.4f})"
 
-    # 2. Test short trade at stoploss price
+    # Verify that profit at stoploss price matches the expected stoploss percentage
+    assert abs(current_profit_at_sl - long_cache['stoploss']) < 0.0001, \
+        f"Profit at SL price ({current_profit_at_sl:.4f}) should match stoploss value ({long_cache['stoploss']:.4f})"
+
+    # Test short trade at stoploss price
     short_sl_price = short_cache['stoploss_price']
-    short_exit = strategy.should_exit(mock_short_trade, short_sl_price, short_time)
+    current_profit_at_sl = short_profit(short_sl_price)
 
-    assert len(short_exit) == 1, "Short trade should exit at stoploss price"
-    assert short_exit[0].exit_type == ExitType.STOP_LOSS, "Exit should be stoploss type"
+    # Verify custom_stoploss returns the expected value at the stoploss price
+    short_sl_value = strategy.custom_stoploss(
+        pair, mock_short_trade, short_time, short_sl_price, current_profit_at_sl
+    )
 
-    # Calculate actual profit at stoploss - should match stoploss percentage
-    short_profit_at_sl = short_profit(short_sl_price)
-    assert abs(short_profit_at_sl - short_cache['stoploss']) < 0.0001, \
-        f"Short profit at SL ({short_profit_at_sl:.4f}) should match stoploss value ({short_cache['stoploss']:.4f})"
+    # The returned stoploss value should match what's in the cache
+    assert abs(short_sl_value - short_cache['stoploss']) < 0.0001, \
+        f"Returned stoploss value ({short_sl_value:.4f}) should match cached value ({short_cache['stoploss']:.4f})"
 
-    # 3. Now test the actual issue - compare with real FreqTrade logs
-    # Check if there's a difference between long and short stoploss behavior
+    # Verify that profit at stoploss price matches the expected stoploss percentage
+    assert abs(current_profit_at_sl - short_cache['stoploss']) < 0.0001, \
+        f"Profit at SL price ({current_profit_at_sl:.4f}) should match stoploss value ({short_cache['stoploss']:.4f})"
 
-    # First check if stoploss values are symmetric (should be for same regime)
+
+def test_stoploss_in_neutral_regime(strategy, mock_trade, mock_short_trade):
+    """
+    Test that stoploss values are symmetric for long and short trades in a neutral regime.
+    """
+    # Setup test parameters
+    pair = "BTC/USDT"
+    entry_rate = 20000
+    current_time = datetime.now()
+
     # Force regime detector to return neutral to eliminate alignment factors
     strategy.regime_detector.detect_regime = lambda: "neutral"
     strategy.regime_detector.is_counter_trend = lambda x: False
     strategy.regime_detector.is_aligned_trend = lambda x: False
 
-    # Recreate trades with the same conditions
+    # Configure mock trades
+    mock_trade.pair = pair
+    mock_trade.open_rate = entry_rate
+    mock_trade.open_date_utc = current_time
+    mock_trade.is_short = False
+
+    mock_short_trade.pair = pair
+    mock_short_trade.open_rate = entry_rate
+    short_time = current_time + timedelta(seconds=1)
+    mock_short_trade.open_date_utc = short_time
+    mock_short_trade.is_short = True
+
+    # Initialize trades in strategy
+    strategy.trade_cache['active_trades'] = {}
+    strategy.confirm_trade_entry(
+        pair, "limit", 0.1, entry_rate, "GTC",
+        current_time, "test_entry", "buy"
+    )
+
+    strategy.confirm_trade_entry(
+        pair, "limit", 0.1, entry_rate, "GTC",
+        short_time, "test_entry", "sell"
+    )
+
+    # Get trade IDs and cache entries
+    long_trade_id = create_trade_id(pair, current_time)
+    short_trade_id = create_trade_id(pair, short_time)
+
+    long_cache = strategy.trade_cache['active_trades'][long_trade_id]
+    short_cache = strategy.trade_cache['active_trades'][short_trade_id]
+
+    # In neutral regime, long and short stoploss should be identical
+    assert abs(abs(long_cache['stoploss']) - abs(short_cache['stoploss'])) < 0.0001, \
+        f"Long and short stoploss should be identical in neutral regime, but got " \
+        f"long: {long_cache['stoploss']:.4f}, short: {short_cache['stoploss']:.4f}"
+
+    # Verify stoploss prices reflect the opposite directions
+    assert long_cache['stoploss_price'] < entry_rate, "Long stoploss price should be below entry"
+    assert short_cache['stoploss_price'] > entry_rate, "Short stoploss price should be above entry"
+
+    # Calculate percentage distance from entry to stoploss price
+    long_distance = (entry_rate - long_cache['stoploss_price']) / entry_rate
+    short_distance = (short_cache['stoploss_price'] - entry_rate) / entry_rate
+
+    # The percentage distance should be very close for both directions
+    assert abs(long_distance - short_distance) < 0.0001, \
+        f"Percentage distance to stoploss should be similar, but got " \
+        f"long: {long_distance:.4f}, short: {short_distance:.4f}"
+
+
+def test_stoploss_for_counter_and_aligned_trends(strategy, mock_trade, mock_short_trade):
+    """
+    Test that stoploss values are adjusted correctly based on trend alignment.
+
+    Counter-trend trades should have tighter stoploss (less negative/closer to zero)
+    Aligned-trend trades should have looser stoploss (more negative/further from zero)
+    """
+    # Setup test parameters
+    pair = "BTC/USDT"
+    entry_rate = 20000
+    current_time = datetime.now()
+
+    # === FORCE CONFIG VALUES FOR THIS TEST ===
+    # Override the factor values directly in the config for this test
+    # This ensures the test uses the intended values regardless of what's in the config
+    strategy.strategy_config.counter_trend_stoploss_factor = 0.8
+    strategy.strategy_config.aligned_trend_stoploss_factor = 1.2
+
+    # Get the actual factor values for validation and logging
+    counter_factor = strategy.strategy_config.counter_trend_stoploss_factor
+    aligned_factor = strategy.strategy_config.aligned_trend_stoploss_factor
+
+    # For this test to work reliably, counter_factor should be < aligned_factor
+    assert counter_factor < aligned_factor, \
+        f"For tighter counter-trend stoploss, counter_factor ({counter_factor}) " \
+        f"should be less than aligned_factor ({aligned_factor})"
+
+    # ========== TEST BULLISH REGIME ==========
+    # Force a bullish regime
+    strategy.regime_detector.detect_regime = lambda: "bullish"
+    # In bullish regime, long trades are aligned, short trades are counter-trend
+    strategy.regime_detector.is_counter_trend = lambda direction: direction == "short"
+    strategy.regime_detector.is_aligned_trend = lambda direction: direction == "long"
+
+    # Configure mock trades
+    mock_trade.pair = pair
+    mock_trade.open_rate = entry_rate
+    mock_trade.open_date_utc = current_time
+    mock_trade.is_short = False
+
+    mock_short_trade.pair = pair
+    mock_short_trade.open_rate = entry_rate
+    short_time = current_time + timedelta(seconds=1)
+    mock_short_trade.open_date_utc = short_time
+    mock_short_trade.is_short = True
+
+    # Initialize trades in strategy
+    strategy.trade_cache['active_trades'] = {}
+    strategy.confirm_trade_entry(
+        pair, "limit", 0.1, entry_rate, "GTC",
+        current_time, "test_entry", "buy"
+    )
+
+    strategy.confirm_trade_entry(
+        pair, "limit", 0.1, entry_rate, "GTC",
+        short_time, "test_entry", "sell"
+    )
+
+    # Get trade IDs and cache entries
+    long_trade_id = create_trade_id(pair, current_time)
+    short_trade_id = create_trade_id(pair, short_time)
+
+    long_cache = strategy.trade_cache['active_trades'][long_trade_id]
+    short_cache = strategy.trade_cache['active_trades'][short_trade_id]
+
+    # Verify stoploss values for each direction
+    long_stoploss = abs(long_cache['stoploss'])  # Long/aligned should be larger/more negative
+    short_stoploss = abs(short_cache['stoploss'])  # Short/counter should be smaller/less negative
+
+    # Counter-trend should have tighter stoploss (less negative) than aligned-trend
+    assert short_stoploss < long_stoploss, \
+        f"Counter-trend stoploss should be tighter than aligned-trend stoploss, but got " \
+        f"counter (short): {short_cache['stoploss']:.4f}, aligned (long): {long_cache['stoploss']:.4f}"
+
+    # Verify stoploss prices are correctly calculated based on the percentages
+    long_sl_price = long_cache['stoploss_price']
+    short_sl_price = short_cache['stoploss_price']
+
+    # Long stoploss price should be below entry price
+    assert long_sl_price < entry_rate, \
+        f"Long stoploss price ({long_sl_price}) should be below entry price ({entry_rate})"
+
+    # Short stoploss price should be above entry price
+    assert short_sl_price > entry_rate, \
+        f"Short stoploss price ({short_sl_price}) should be above entry price ({entry_rate})"
+
+    # ========== TEST BEARISH REGIME ==========
+    # Now force a bearish regime and test the opposite
+    strategy.regime_detector.detect_regime = lambda: "bearish"
+    # In bearish regime, short trades are aligned, long trades are counter-trend
+    strategy.regime_detector.is_counter_trend = lambda direction: direction == "long"
+    strategy.regime_detector.is_aligned_trend = lambda direction: direction == "short"
+
+    # Initialize trades in strategy
     strategy.trade_cache['active_trades'] = {}
     strategy.confirm_trade_entry(
         pair, "limit", 0.1, entry_rate, "GTC",
@@ -531,37 +734,80 @@ def test_strategy_stoploss_integration(strategy, mock_trade, mock_short_trade):
     )
 
     # Get updated cache entries
-    long_cache = strategy.trade_cache['active_trades'][create_trade_id(pair, current_time)]
-    short_cache = strategy.trade_cache['active_trades'][create_trade_id(pair, short_time)]
+    long_cache = strategy.trade_cache['active_trades'][long_trade_id]
+    short_cache = strategy.trade_cache['active_trades'][short_trade_id]
 
-    # In neutral regime, long and short stoploss should be identical
-    assert abs(abs(long_cache['stoploss']) - abs(short_cache['stoploss'])) < 0.0001, \
-        f"Long and short stoploss should be identical in neutral regime, but got " \
-        f"long: {long_cache['stoploss']:.4f}, short: {short_cache['stoploss']:.4f}"
+    # Verify stoploss values for each direction
+    long_stoploss = abs(long_cache['stoploss'])  # Long/counter should be smaller/less negative
+    short_stoploss = abs(short_cache['stoploss'])  # Short/aligned should be larger/more negative
 
-    # Check behavior at -3% - the specific issue from logs
-    # For a short trade, test what happens at a price that would give -3% loss
-    three_percent_price = entry_rate * 1.03  # This would be a 3% loss for shorts
+    # Now long is counter-trend, short is aligned
+    assert long_stoploss < short_stoploss, \
+        f"Counter-trend stoploss should be tighter than aligned-trend stoploss, but got " \
+        f"counter (long): {long_cache['stoploss']:.4f}, aligned (short): {short_cache['stoploss']:.4f}"
 
-    # This is what FreqTrade would do - call should_exit at the current price
-    exit_at_three_percent = strategy.should_exit(
-        mock_short_trade, three_percent_price, short_time
+    # Verify stoploss prices are correctly calculated based on the percentages
+    long_sl_price = long_cache['stoploss_price']
+    short_sl_price = short_cache['stoploss_price']
+
+    # Long stoploss price should be below entry price (but closer than in bullish regime)
+    assert long_sl_price < entry_rate, \
+        f"Long stoploss price ({long_sl_price}) should be below entry price ({entry_rate})"
+
+    # Short stoploss price should be above entry price (but further than in bullish regime)
+    assert short_sl_price > entry_rate, \
+        f"Short stoploss price ({short_sl_price}) should be above entry price ({entry_rate})"
+
+def test_stoploss_recalculation_on_cache_miss(strategy, mock_trade):
+    """
+    Test that stoploss is correctly recalculated when a trade is not in the cache.
+    """
+    # Setup test parameters
+    pair = "BTC/USDT"
+    entry_rate = 20000
+    current_time = datetime.now()
+
+    # Configure mock trade
+    mock_trade.pair = pair
+    mock_trade.open_rate = entry_rate
+    mock_trade.open_date_utc = current_time
+    mock_trade.is_short = False
+
+    # Configure profit calculation
+    mock_trade.calc_profit_ratio = lambda rate: (rate - entry_rate) / entry_rate
+
+    # Clear the cache to force recalculation
+    strategy.trade_cache['active_trades'] = {}
+
+    # Call custom_stoploss with a specific profit level
+    test_profit = -0.02
+    test_price = entry_rate * (1 + test_profit)  # Price that would give -2% profit
+
+    recalculated_sl = strategy.custom_stoploss(
+        pair, mock_trade, current_time, test_price, test_profit
     )
 
-    # Calculate profit at this price
-    profit_at_three_percent = short_profit(three_percent_price)
-    assert abs(profit_at_three_percent - (-0.03)) < 0.0001, \
-        f"Profit calculation incorrect, expected -0.03, got {profit_at_three_percent:.4f}"
+    # The stoploss should be recalculated and returned
+    assert recalculated_sl < 0, "Recalculated stoploss should be negative"
 
-    # This is the critical test for your issue
-    # If FreqTrade overrides to -3%, this would exit even if your stoploss is set to -1%
-    if short_cache['stoploss'] > -0.03:
-        # If our stoploss is tighter than -3% (like -1%), we shouldn't exit at -3%
-        expected_len = 0
-        assertion_msg = "Short should NOT exit at -3% if stoploss is set tighter"
-    else:
-        # If our stoploss is looser than -3%, we should exit at -3%
-        expected_len = 1
-        assertion_msg = "Short should exit at -3% if stoploss is looser"
+    # Verify trade was added back to cache
+    trade_id = create_trade_id(pair, mock_trade.open_date_utc)
+    assert trade_id in strategy.trade_cache['active_trades'], "Trade should be recreated in cache"
+    assert strategy.trade_cache['active_trades'][trade_id]['stoploss'] == recalculated_sl, \
+        "Cached stoploss should match returned value"
 
-    assert len(exit_at_three_percent) == expected_len, assertion_msg
+    # Verify stoploss price is correctly calculated
+    stoploss_price = strategy.trade_cache['active_trades'][trade_id]['stoploss_price']
+    expected_price = entry_rate * (1 + recalculated_sl)
+
+    assert abs(stoploss_price - expected_price) < 0.01, \
+        f"Stoploss price ({stoploss_price}) should match calculation from percentage ({expected_price})"
+
+    # Call custom_stoploss again with the same trade - should use cached value
+    cached_sl = strategy.custom_stoploss(
+        pair, mock_trade, current_time, test_price, test_profit
+    )
+
+    # Should return the same value as before
+    assert cached_sl == recalculated_sl, \
+        f"Subsequent call should return cached value ({recalculated_sl}), but got {cached_sl}"

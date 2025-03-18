@@ -38,8 +38,8 @@ class StrategyConfig:
         # Trend factor settings
         self.counter_trend_factor = 0.6
         self.aligned_trend_factor = 1.2
-        self.counter_trend_stoploss_factor = 1.2
-        self.aligned_trend_stoploss_factor = 0.8
+        self.counter_trend_stoploss_factor = 0.8
+        self.aligned_trend_stoploss_factor = 1.2
 
         # Win rate and regime settings
         self.min_win_rate = 0.4
