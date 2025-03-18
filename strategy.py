@@ -18,7 +18,7 @@ from macd_trend_adaptive_strategy.risk_management.stoploss_calculator import Sto
 from macd_trend_adaptive_strategy.utils import (
     get_direction, create_trade_id,
     log_new_trade, log_trade_exit, log_roi_exit,
-    log_trade_cache_recreated, log_strategy_initialization,
+    log_trade_cache_recreated, log_strategy_initialization, log_stoploss_hit,
 )
 
 # Set up strategy-wide logging
@@ -233,7 +233,10 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         return True
 
     def should_exit(self, trade: Trade, rate: float, date: datetime, **kwargs) -> List:
-        """Override should_exit to use our adaptive ROI logic."""
+        """
+        Combined logic for both ROI (take profit) and stoploss.
+        This replaces both the old should_exit and custom_stoploss methods.
+        """
         # Get current profit
         current_profit = trade.calc_profit_ratio(rate)
 
@@ -247,8 +250,27 @@ class MACDTrendAdaptiveStrategy(IStrategy):
             trade_id, trade.pair, trade.open_rate, trade.open_date_utc, trade.is_short
         )
 
-        # ONLY check for ROI exit - no stoploss check here
-        # Check for ROI exit
+        # Check for stoploss hit - Note we're now doing this check in should_exit instead of custom_stoploss
+        # For long positions: current_profit <= stoploss (negative value)
+        # For short positions: current_profit <= stoploss (negative value) as well
+        if current_profit <= trade_params['stoploss']:
+            direction = trade_params['direction']
+
+            # Use the appropriate log function for stoploss hit
+            log_stoploss_hit(
+                pair=trade.pair,
+                direction=direction,
+                current_price=rate,
+                stoploss_price=trade_params['stoploss_price'],
+                entry_price=trade.open_rate,
+                profit_ratio=current_profit,
+                regime=trade_params['regime']
+            )
+
+            return [ExitCheckTuple(exit_type=ExitType.STOP_LOSS,
+                                   exit_reason=f"stoploss_{direction}_{trade_params['regime']}")]
+
+        # Check for ROI exit (take profit)
         if current_profit >= trade_params['roi']:
             trade_type = ("countertrend" if trade_params['is_counter_trend']
                           else "aligned" if trade_params['is_aligned_trend']
@@ -274,19 +296,6 @@ class MACDTrendAdaptiveStrategy(IStrategy):
 
         # Otherwise, continue holding
         return []
-
-    def custom_stoploss(self, pair: str, trade: Trade, current_time: datetime,
-                        current_rate: float, current_profit: float, **kwargs) -> float:
-        """Custom stoploss logic, returning the new stoploss percentage."""
-        # Get trade ID
-        trade_id = create_trade_id(pair, trade.open_date_utc)
-
-        # Get or create trade cache entry
-        cache_entry = self._get_or_create_trade_cache(
-            trade_id, pair, trade.open_rate, trade.open_date_utc, trade.is_short
-        )
-
-        return cache_entry['stoploss']
 
     def custom_stake_amount(self, pair: str, current_time: datetime, current_rate: float,
                             proposed_stake: float, min_stake: Optional[float], max_stake: float,

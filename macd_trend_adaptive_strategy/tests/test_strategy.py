@@ -99,52 +99,6 @@ def test_confirm_trade_entry(strategy, mock_db_handler):
     assert cache_entry['regime'] in ["bullish", "bearish", "neutral"]
 
 
-def test_should_exit_stoploss_hit(strategy, mock_trade):
-    """Test custom_stoploss method when stoploss is hit"""
-    # Setup
-    mock_trade.pair = "BTC/USDT"
-    mock_trade.open_rate = 20000
-    mock_trade.open_date_utc = datetime.now()
-    mock_trade.is_short = False
-
-    # Configure calc_profit_ratio to return specific values based on rate
-    def calc_profit_ratio(rate):
-        if rate == 19400:
-            return -0.03  # 3% loss at stoploss price
-        elif rate == 19500:
-            return -0.025  # 2.5% loss at price above stoploss - still below ROI target
-        else:
-            return (rate - mock_trade.open_rate) / mock_trade.open_rate
-
-    mock_trade.calc_profit_ratio = calc_profit_ratio
-
-    # Add trade to cache
-    trade_id = f"{mock_trade.pair}_{mock_trade.open_date_utc.timestamp()}"
-    strategy.trade_cache['active_trades'][trade_id] = {
-        'direction': 'long',
-        'entry_rate': mock_trade.open_rate,
-        'roi': 0.05,
-        'stoploss': -0.03,
-        'stoploss_price': 19400,  # 3% below entry
-        'is_counter_trend': False,
-        'is_aligned_trend': True,
-        'regime': 'bullish',
-        'last_updated': int(datetime.now().timestamp())
-    }
-
-    # Test the stoploss value from custom_stoploss
-    current_time = datetime.now()
-    current_profit = -0.03
-    stoploss = strategy.custom_stoploss(mock_trade.pair, mock_trade, current_time, 19400, current_profit)
-
-    # Should return the correct stoploss value
-    assert stoploss == -0.03
-
-    # Confirm that should_exit doesn't return a stoploss signal
-    exit_signals = strategy.should_exit(mock_trade, 19400, current_time)
-    assert len(exit_signals) == 0
-
-
 def test_should_exit_roi_hit(strategy, mock_trade):
     """Test should_exit method when ROI target is hit"""
     # Setup
@@ -168,11 +122,15 @@ def test_should_exit_roi_hit(strategy, mock_trade):
         'last_updated': int(datetime.now().timestamp())
     }
 
-    # Mock profit ratio to be at ROI target
-    mock_trade.calc_profit_ratio = lambda x: target_roi
+    # Configure profit calculation for this test
+    def calc_profit_ratio(rate):
+        return (rate - mock_trade.open_rate) / mock_trade.open_rate
+
+    mock_trade.calc_profit_ratio = calc_profit_ratio
 
     # Test with price at ROI target
-    exit_signals = strategy.should_exit(mock_trade, 21000, datetime.now())
+    roi_price = 21000  # 5% above entry
+    exit_signals = strategy.should_exit(mock_trade, roi_price, datetime.now())
 
     # Should return an ROI exit signal
     assert len(exit_signals) == 1
@@ -180,8 +138,8 @@ def test_should_exit_roi_hit(strategy, mock_trade):
     assert "adaptive_roi" in exit_signals[0].exit_reason
 
     # Test with price below ROI target
-    mock_trade.calc_profit_ratio = lambda x: target_roi - 0.01  # 4% profit
-    exit_signals = strategy.should_exit(mock_trade, 20800, datetime.now())
+    below_roi_price = 20800  # 4% above entry
+    exit_signals = strategy.should_exit(mock_trade, below_roi_price, datetime.now())
 
     # Should not exit
     assert len(exit_signals) == 0
@@ -215,12 +173,17 @@ def test_should_exit_default_roi(strategy, mock_trade):
         'last_updated': int(datetime.now().timestamp())
     }
 
-    # Mock profit ratio to be above default ROI but below adaptive ROI
-    # Default ROI is 4%, adaptive ROI is 5%, so let's set profit at 4.5%
-    mock_trade.calc_profit_ratio = lambda x: 0.045
+    # Configure profit calculation to be above default ROI but below adaptive ROI
+    def calc_profit_ratio(rate):
+        if rate == 20800:
+            return 0.04  # Exactly at default ROI
+        else:
+            return (rate - mock_trade.open_rate) / mock_trade.open_rate
+
+    mock_trade.calc_profit_ratio = calc_profit_ratio
 
     # Test with price at default ROI target
-    exit_signals = strategy.should_exit(mock_trade, 21000, datetime.now())
+    exit_signals = strategy.should_exit(mock_trade, 20800, datetime.now())
 
     # Should exit with default_roi reason
     assert len(exit_signals) == 1
@@ -229,10 +192,143 @@ def test_should_exit_default_roi(strategy, mock_trade):
 
     # Now test with default ROI exit disabled
     strategy.strategy_config.use_default_roi_exit = False
-    exit_signals = strategy.should_exit(mock_trade, 21000, datetime.now())
+    exit_signals = strategy.should_exit(mock_trade, 20800, datetime.now())
 
     # Should not exit
     assert len(exit_signals) == 0
+
+
+def test_should_exit_stoploss_hit(strategy, mock_trade):
+    """Test should_exit method when stoploss is hit"""
+    # Setup
+    mock_trade.pair = "BTC/USDT"
+    mock_trade.open_rate = 20000
+    mock_trade.open_date_utc = datetime.now()
+    mock_trade.is_short = False
+
+    # Configure calc_profit_ratio to return specific values based on rate
+    def calc_profit_ratio(rate):
+        if rate == 19400:
+            return -0.03  # 3% loss at stoploss price
+        elif rate == 19500:
+            return -0.025  # 2.5% loss at price above stoploss - still below ROI target
+        else:
+            return (rate - mock_trade.open_rate) / mock_trade.open_rate
+
+    mock_trade.calc_profit_ratio = calc_profit_ratio
+
+    # Add trade to cache
+    trade_id = f"{mock_trade.pair}_{mock_trade.open_date_utc.timestamp()}"
+    strategy.trade_cache['active_trades'][trade_id] = {
+        'direction': 'long',
+        'entry_rate': mock_trade.open_rate,
+        'roi': 0.05,
+        'stoploss': -0.03,
+        'stoploss_price': 19400,  # 3% below entry
+        'is_counter_trend': False,
+        'is_aligned_trend': True,
+        'regime': 'bullish',
+        'last_updated': int(datetime.now().timestamp())
+    }
+
+    # Test at stoploss price (3% loss)
+    current_time = datetime.now()
+    stoploss_rate = 19400  # This price should trigger stoploss
+    exit_signals = strategy.should_exit(mock_trade, stoploss_rate, current_time)
+
+    # Should return stoploss exit signal
+    assert len(exit_signals) == 1
+    assert exit_signals[0].exit_type == ExitType.STOP_LOSS
+    assert "stoploss_long" in exit_signals[0].exit_reason
+
+    # Test with price slightly above stoploss (2.5% loss)
+    better_price = 19500  # Price above stoploss
+    exit_signals = strategy.should_exit(mock_trade, better_price, current_time)
+
+    # Should not exit since we're not at stoploss yet and not at ROI
+    assert len(exit_signals) == 0
+
+
+def test_should_exit_short_stoploss_hit(strategy, mock_short_trade):
+    """Test should_exit method for short trade stoploss"""
+    # Setup
+    mock_short_trade.pair = "BTC/USDT"
+    mock_short_trade.open_rate = 20000
+    mock_short_trade.open_date_utc = datetime.now()
+    mock_short_trade.is_short = True
+
+    # Configure profit calculation for short trade
+    def calc_profit_ratio(rate):
+        if rate == 20600:
+            return -0.03  # 3% loss at stoploss price (price went up)
+        else:
+            # For shorts: profit = (entry - current) / entry
+            return (mock_short_trade.open_rate - rate) / mock_short_trade.open_rate
+
+    mock_short_trade.calc_profit_ratio = calc_profit_ratio
+
+    # Add trade to cache
+    trade_id = f"{mock_short_trade.pair}_{mock_short_trade.open_date_utc.timestamp()}"
+    strategy.trade_cache['active_trades'][trade_id] = {
+        'direction': 'short',
+        'entry_rate': mock_short_trade.open_rate,
+        'roi': 0.05,  # 5% ROI target for short
+        'stoploss': -0.03,  # 3% stoploss
+        'stoploss_price': 20600,  # 3% above entry for short
+        'is_counter_trend': False,
+        'is_aligned_trend': True,
+        'regime': 'bearish',
+        'last_updated': int(datetime.now().timestamp())
+    }
+
+    # Test at stoploss price (3% loss for short)
+    current_time = datetime.now()
+    stoploss_rate = 20600  # This price should trigger stoploss
+    exit_signals = strategy.should_exit(mock_short_trade, stoploss_rate, current_time)
+
+    # Should return stoploss exit signal
+    assert len(exit_signals) == 1
+    assert exit_signals[0].exit_type == ExitType.STOP_LOSS
+    assert "stoploss_short" in exit_signals[0].exit_reason
+
+
+def test_should_exit_short_roi_hit(strategy, mock_short_trade):
+    """Test should_exit method for short trade ROI"""
+    # Setup
+    mock_short_trade.pair = "BTC/USDT"
+    mock_short_trade.open_rate = 20000
+    mock_short_trade.open_date_utc = datetime.now()
+    mock_short_trade.is_short = True
+
+    # Configure profit calculation for short trade
+    def calc_profit_ratio(rate):
+        # For shorts: profit = (entry - current) / entry
+        return (mock_short_trade.open_rate - rate) / mock_short_trade.open_rate
+
+    mock_short_trade.calc_profit_ratio = calc_profit_ratio
+
+    # Add trade to cache
+    trade_id = f"{mock_short_trade.pair}_{mock_short_trade.open_date_utc.timestamp()}"
+    strategy.trade_cache['active_trades'][trade_id] = {
+        'direction': 'short',
+        'entry_rate': mock_short_trade.open_rate,
+        'roi': 0.05,  # 5% ROI target for short
+        'stoploss': -0.03,  # 3% stoploss
+        'stoploss_price': 20600,
+        'is_counter_trend': False,
+        'is_aligned_trend': True,
+        'regime': 'bearish',
+        'last_updated': int(datetime.now().timestamp())
+    }
+
+    # Test at ROI price (5% profit for short)
+    roi_price = 19000  # 5% below entry
+    exit_signals = strategy.should_exit(mock_short_trade, roi_price, datetime.now())
+
+    # Should return ROI exit signal
+    assert len(exit_signals) == 1
+    assert exit_signals[0].exit_type == ExitType.ROI
+    assert "adaptive_roi" in exit_signals[0].exit_reason
 
 
 def test_confirm_trade_exit(strategy, mock_trade):
@@ -277,113 +373,6 @@ def test_confirm_trade_exit(strategy, mock_trade):
 
     # Check trade was removed from cache
     assert trade_id not in strategy.trade_cache['active_trades']
-
-
-def test_custom_stoploss(strategy, mock_trade):
-    """Test custom_stoploss method"""
-    # Setup
-    pair = "BTC/USDT"
-    current_time = datetime.now()
-    current_rate = 20500
-    current_profit = 0.025
-
-    # Add trade to cache
-    trade_id = f"{pair}_{mock_trade.open_date_utc.timestamp()}"
-    expected_stoploss = -0.03
-    strategy.trade_cache['active_trades'][trade_id] = {
-        'direction': 'long',
-        'entry_rate': mock_trade.open_rate,
-        'roi': 0.05,
-        'stoploss': expected_stoploss,
-        'stoploss_price': 19400,
-        'is_counter_trend': False,
-        'is_aligned_trend': True,
-        'regime': 'bullish',
-        'last_updated': int(current_time.timestamp())
-    }
-
-    # Call method with trade in cache
-    stoploss = strategy.custom_stoploss(
-        pair, mock_trade, current_time, current_rate, current_profit
-    )
-
-    # Verify stoploss value for cached trade
-    assert stoploss == expected_stoploss
-
-    # Test with trade not in cache
-    strategy.trade_cache['active_trades'] = {}
-
-    # Should calculate a fresh stoploss value
-    stoploss = strategy.custom_stoploss(
-        pair, mock_trade, current_time, current_rate, current_profit
-    )
-
-    # Verify calculated stoploss is reasonable
-    assert stoploss < 0  # Should be negative
-    assert strategy.strategy_config.max_stoploss <= stoploss <= strategy.strategy_config.min_stoploss
-
-    # Verify trade added to cache
-    recalculated_trade_id = create_trade_id(pair, mock_trade.open_date_utc)
-    assert recalculated_trade_id in strategy.trade_cache['active_trades']
-    assert 'stoploss' in strategy.trade_cache['active_trades'][recalculated_trade_id]
-
-
-def test_custom_stoploss_long(strategy, mock_trade):
-    """Test custom_stoploss method for long positions"""
-    # Setup
-    pair = "BTC/USDT"
-    current_time = datetime.now()
-    current_rate = 20500
-    current_profit = 0.025
-
-    # Configure as a long trade
-    mock_trade.is_short = False
-
-    # Clear cache to force recalculation
-    strategy.trade_cache['active_trades'] = {}
-
-    # Calculate stoploss
-    stoploss = strategy.custom_stoploss(
-        pair, mock_trade, current_time, current_rate, current_profit
-    )
-
-    # Verify bounds
-    assert strategy.strategy_config.max_stoploss <= stoploss <= strategy.strategy_config.min_stoploss
-
-    # Verify stoploss price is calculated correctly
-    stoploss_price = strategy.stoploss_calculator.calculate_stoploss_price(
-        mock_trade.open_rate, stoploss, mock_trade.is_short
-    )
-    assert stoploss_price < mock_trade.open_rate  # For longs, stoploss price should be below entry
-
-
-def test_custom_stoploss_short(strategy, mock_short_trade):
-    """Test custom_stoploss method for short positions"""
-    # Setup
-    pair = "BTC/USDT"
-    current_time = datetime.now()
-    current_rate = 20500
-    current_profit = 0.025
-
-    # Configure as a short trade
-    mock_short_trade.is_short = True
-
-    # Clear cache to force recalculation
-    strategy.trade_cache['active_trades'] = {}
-
-    # Calculate stoploss
-    stoploss = strategy.custom_stoploss(
-        pair, mock_short_trade, current_time, current_rate, current_profit
-    )
-
-    # Verify bounds
-    assert strategy.strategy_config.max_stoploss <= stoploss <= strategy.strategy_config.min_stoploss
-
-    # Verify stoploss price is calculated correctly
-    stoploss_price = strategy.stoploss_calculator.calculate_stoploss_price(
-        mock_short_trade.open_rate, stoploss, mock_short_trade.is_short
-    )
-    assert stoploss_price > mock_short_trade.open_rate  # For shorts, stoploss price should be above entry
 
 
 def test_leverage(strategy):
@@ -477,92 +466,6 @@ def test_stoploss_values_in_cache(strategy, mock_trade, mock_short_trade):
 
     assert abs(long_cache['stoploss_price'] - expected_long_price) < 0.01, "Long stoploss price calculation mismatch"
     assert abs(short_cache['stoploss_price'] - expected_short_price) < 0.01, "Short stoploss price calculation mismatch"
-
-
-def test_custom_stoploss_returns_correct_values(strategy, mock_trade, mock_short_trade):
-    """
-    Test that custom_stoploss method returns the correct stoploss values from cache
-    and correctly calculates stoploss at the actual stoploss price.
-    """
-    # Setup test parameters
-    pair = "BTC/USDT"
-    entry_rate = 20000
-    current_time = datetime.now()
-
-    # Configure mock trades
-    mock_trade.pair = pair
-    mock_trade.open_rate = entry_rate
-    mock_trade.open_date_utc = current_time
-    mock_trade.is_short = False
-
-    mock_short_trade.pair = pair
-    mock_short_trade.open_rate = entry_rate
-    short_time = current_time + timedelta(seconds=1)
-    mock_short_trade.open_date_utc = short_time
-    mock_short_trade.is_short = True
-
-    # Configure profit calculation
-    def long_profit(rate):
-        return (rate - entry_rate) / entry_rate
-
-    def short_profit(rate):
-        return (entry_rate - rate) / entry_rate
-
-    mock_trade.calc_profit_ratio = long_profit
-    mock_short_trade.calc_profit_ratio = short_profit
-
-    # Initialize trades in strategy
-    strategy.confirm_trade_entry(
-        pair, "limit", 0.1, entry_rate, "GTC",
-        current_time, "test_entry", "buy"
-    )
-
-    strategy.confirm_trade_entry(
-        pair, "limit", 0.1, entry_rate, "GTC",
-        short_time, "test_entry", "sell"
-    )
-
-    # Get trade IDs and cache entries
-    long_trade_id = create_trade_id(pair, current_time)
-    short_trade_id = create_trade_id(pair, short_time)
-
-    long_cache = strategy.trade_cache['active_trades'][long_trade_id]
-    short_cache = strategy.trade_cache['active_trades'][short_trade_id]
-
-    # Test long trade at stoploss price
-    long_sl_price = long_cache['stoploss_price']
-    current_profit_at_sl = long_profit(long_sl_price)
-
-    # Verify custom_stoploss returns the expected value at the stoploss price
-    long_sl_value = strategy.custom_stoploss(
-        pair, mock_trade, current_time, long_sl_price, current_profit_at_sl
-    )
-
-    # The returned stoploss value should match what's in the cache
-    assert abs(long_sl_value - long_cache['stoploss']) < 0.0001, \
-        f"Returned stoploss value ({long_sl_value:.4f}) should match cached value ({long_cache['stoploss']:.4f})"
-
-    # Verify that profit at stoploss price matches the expected stoploss percentage
-    assert abs(current_profit_at_sl - long_cache['stoploss']) < 0.0001, \
-        f"Profit at SL price ({current_profit_at_sl:.4f}) should match stoploss value ({long_cache['stoploss']:.4f})"
-
-    # Test short trade at stoploss price
-    short_sl_price = short_cache['stoploss_price']
-    current_profit_at_sl = short_profit(short_sl_price)
-
-    # Verify custom_stoploss returns the expected value at the stoploss price
-    short_sl_value = strategy.custom_stoploss(
-        pair, mock_short_trade, short_time, short_sl_price, current_profit_at_sl
-    )
-
-    # The returned stoploss value should match what's in the cache
-    assert abs(short_sl_value - short_cache['stoploss']) < 0.0001, \
-        f"Returned stoploss value ({short_sl_value:.4f}) should match cached value ({short_cache['stoploss']:.4f})"
-
-    # Verify that profit at stoploss price matches the expected stoploss percentage
-    assert abs(current_profit_at_sl - short_cache['stoploss']) < 0.0001, \
-        f"Profit at SL price ({current_profit_at_sl:.4f}) should match stoploss value ({short_cache['stoploss']:.4f})"
-
 
 def test_stoploss_in_neutral_regime(strategy, mock_trade, mock_short_trade):
     """
@@ -760,60 +663,6 @@ def test_stoploss_for_counter_and_aligned_trends(strategy, mock_trade, mock_shor
     assert short_sl_price > entry_rate, \
         f"Short stoploss price ({short_sl_price}) should be above entry price ({entry_rate})"
 
-def test_stoploss_recalculation_on_cache_miss(strategy, mock_trade):
-    """
-    Test that stoploss is correctly recalculated when a trade is not in the cache.
-    """
-    # Setup test parameters
-    pair = "BTC/USDT"
-    entry_rate = 20000
-    current_time = datetime.now()
-
-    # Configure mock trade
-    mock_trade.pair = pair
-    mock_trade.open_rate = entry_rate
-    mock_trade.open_date_utc = current_time
-    mock_trade.is_short = False
-
-    # Configure profit calculation
-    mock_trade.calc_profit_ratio = lambda rate: (rate - entry_rate) / entry_rate
-
-    # Clear the cache to force recalculation
-    strategy.trade_cache['active_trades'] = {}
-
-    # Call custom_stoploss with a specific profit level
-    test_profit = -0.02
-    test_price = entry_rate * (1 + test_profit)  # Price that would give -2% profit
-
-    recalculated_sl = strategy.custom_stoploss(
-        pair, mock_trade, current_time, test_price, test_profit
-    )
-
-    # The stoploss should be recalculated and returned
-    assert recalculated_sl < 0, "Recalculated stoploss should be negative"
-
-    # Verify trade was added back to cache
-    trade_id = create_trade_id(pair, mock_trade.open_date_utc)
-    assert trade_id in strategy.trade_cache['active_trades'], "Trade should be recreated in cache"
-    assert strategy.trade_cache['active_trades'][trade_id]['stoploss'] == recalculated_sl, \
-        "Cached stoploss should match returned value"
-
-    # Verify stoploss price is correctly calculated
-    stoploss_price = strategy.trade_cache['active_trades'][trade_id]['stoploss_price']
-    expected_price = entry_rate * (1 + recalculated_sl)
-
-    assert abs(stoploss_price - expected_price) < 0.01, \
-        f"Stoploss price ({stoploss_price}) should match calculation from percentage ({expected_price})"
-
-    # Call custom_stoploss again with the same trade - should use cached value
-    cached_sl = strategy.custom_stoploss(
-        pair, mock_trade, current_time, test_price, test_profit
-    )
-
-    # Should return the same value as before
-    assert cached_sl == recalculated_sl, \
-        f"Subsequent call should return cached value ({recalculated_sl}), but got {cached_sl}"
-
 
 def test_strategy_backtest_initialization():
     """Test that strategy properly clears performance data when initializing in backtest mode"""
@@ -842,3 +691,91 @@ def test_strategy_backtest_initialization():
 
         # Verify clear_performance_data was called
         mock_db_handler.clear_performance_data.assert_called_once()
+
+
+def test_stoploss_vs_roi_precedence(strategy, mock_trade):
+    """Test that stoploss has precedence over ROI when price is ambiguous"""
+    # Setup a scenario where price would trigger both stoploss and ROI
+    # This is an edge case that shouldn't happen in real trading
+    mock_trade.pair = "BTC/USDT"
+    mock_trade.open_rate = 20000
+    mock_trade.open_date_utc = datetime.now()
+    mock_trade.is_short = False
+
+    # Configure a profit calculation function that would trigger both stoploss and ROI
+    # This is artificial but helps test the precedence
+    def calc_profit_ratio(rate):
+        # Return a value exactly matching stoploss threshold
+        return -0.03
+
+    mock_trade.calc_profit_ratio = calc_profit_ratio
+
+    # Add trade to cache with stoploss and ROI at same value
+    # Again, this is artificial but helps test the logic
+    trade_id = f"{mock_trade.pair}_{mock_trade.open_date_utc.timestamp()}"
+    strategy.trade_cache['active_trades'][trade_id] = {
+        'direction': 'long',
+        'entry_rate': mock_trade.open_rate,
+        'roi': -0.03,  # Set ROI equal to stoploss for testing precedence
+        'stoploss': -0.03,
+        'stoploss_price': 19400,
+        'is_counter_trend': False,
+        'is_aligned_trend': True,
+        'regime': 'bullish',
+        'last_updated': int(datetime.now().timestamp())
+    }
+
+    # Test exit logic
+    exit_signals = strategy.should_exit(mock_trade, 19400, datetime.now())
+
+    # Verify stoploss has precedence (it should be checked first in the code)
+    assert len(exit_signals) == 1
+    assert exit_signals[0].exit_type == ExitType.STOP_LOSS
+    assert "stoploss" in exit_signals[0].exit_reason
+
+
+def test_trade_cache_on_exit(strategy, mock_trade):
+    """Test that trade cache is properly updated after an exit"""
+    # Setup
+    mock_trade.pair = "BTC/USDT"
+    mock_trade.open_rate = 20000
+    mock_trade.open_date_utc = datetime.now()
+    mock_trade.is_short = False
+
+    # Add trade to cache
+    trade_id = f"{mock_trade.pair}_{mock_trade.open_date_utc.timestamp()}"
+    strategy.trade_cache['active_trades'][trade_id] = {
+        'direction': 'long',
+        'entry_rate': mock_trade.open_rate,
+        'roi': 0.05,
+        'stoploss': -0.03,
+        'stoploss_price': 19400,
+        'is_counter_trend': False,
+        'is_aligned_trend': True,
+        'regime': 'bullish',
+        'last_updated': int(datetime.now().timestamp())
+    }
+
+    # Mock the performance tracker update method
+    strategy.performance_tracker.update_performance = MagicMock()
+
+    # Call confirm_trade_exit
+    result = strategy.confirm_trade_exit(
+        pair=mock_trade.pair,
+        trade=mock_trade,
+        order_type="limit",
+        amount=0.1,
+        rate=21000,  # 5% profit
+        time_in_force="GTC",
+        exit_reason="roi",
+        current_time=datetime.now()
+    )
+
+    # Verify result
+    assert result is True
+
+    # Verify performance tracker was updated
+    strategy.performance_tracker.update_performance.assert_called_once()
+
+    # Verify trade was removed from cache
+    assert trade_id not in strategy.trade_cache['active_trades']
