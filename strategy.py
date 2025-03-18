@@ -17,7 +17,7 @@ from macd_trend_adaptive_strategy.risk_management.roi_calculator import ROICalcu
 from macd_trend_adaptive_strategy.risk_management.stoploss_calculator import StoplossCalculator
 from macd_trend_adaptive_strategy.utils import (
     get_direction, create_trade_id,
-    log_new_trade, log_trade_exit, log_stoploss_hit, log_roi_exit,
+    log_new_trade, log_trade_exit, log_roi_exit,
     log_trade_cache_recreated, log_strategy_initialization,
 )
 

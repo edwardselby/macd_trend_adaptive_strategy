@@ -578,6 +578,9 @@ def test_stoploss_in_neutral_regime(strategy, mock_trade, mock_short_trade):
     strategy.regime_detector.is_counter_trend = lambda x: False
     strategy.regime_detector.is_aligned_trend = lambda x: False
 
+    # Ensure ROI calculations are symmetrical by disabling any long_roi_boost
+    strategy.strategy_config.long_roi_boost = 0.0
+
     # Configure mock trades
     mock_trade.pair = pair
     mock_trade.open_rate = entry_rate
@@ -626,7 +629,6 @@ def test_stoploss_in_neutral_regime(strategy, mock_trade, mock_short_trade):
     assert abs(long_distance - short_distance) < 0.0001, \
         f"Percentage distance to stoploss should be similar, but got " \
         f"long: {long_distance:.4f}, short: {short_distance:.4f}"
-
 
 def test_stoploss_for_counter_and_aligned_trends(strategy, mock_trade, mock_short_trade):
     """
