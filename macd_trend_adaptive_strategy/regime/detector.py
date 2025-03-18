@@ -2,7 +2,7 @@ import logging
 from typing import Literal
 
 from ..performance import PerformanceTracker
-from ..utils import log_messages
+from ..utils import log_regime_detection
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class RegimeDetector:
         # Default to neutral if we don't have enough recent data
         if (long_recent_trades < self.config.min_recent_trades_per_direction or
                 short_recent_trades < self.config.min_recent_trades_per_direction):
-            log_messages.log_regime_detection(
+            log_regime_detection(
                 long_wr=long_win_rate,
                 short_wr=short_win_rate,
                 long_trades=long_recent_trades,
@@ -65,7 +65,7 @@ class RegimeDetector:
         elif win_rate_difference < -self.config.regime_win_rate_diff:
             regime = "bearish"
 
-        log_messages.log_regime_detection(
+        log_regime_detection(
             long_wr=long_win_rate,
             short_wr=short_win_rate,
             long_trades=long_recent_trades,

@@ -1,7 +1,7 @@
 import logging
 
 from ..regime import RegimeDetector
-from ..utils import log_messages
+from ..utils import log_stoploss_calculation, log_stoploss_price
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class StoplossCalculator:
             min(adjusted_stoploss, self.config.max_stoploss)
         )
 
-        log_messages.log_stoploss_calculation(
+        log_stoploss_calculation(
             direction=direction,
             roi=roi,
             risk_ratio=self.config.risk_reward_ratio,
@@ -91,7 +91,7 @@ class StoplossCalculator:
 
         direction = "short" if is_short else "long"
 
-        log_messages.log_stoploss_price(
+        log_stoploss_price(
             direction=direction,
             entry_price=entry_rate,
             stoploss_pct=stoploss,

@@ -2,7 +2,7 @@ import logging
 
 from ..performance import PerformanceTracker
 from ..regime import RegimeDetector
-from ..utils import log_messages
+from ..utils import log_roi_calculation
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ class ROICalculator:
         else:
             final_roi = base_roi
 
-        log_messages.log_roi_calculation(
+        log_roi_calculation(
             direction=direction,
             base_roi=base_roi,
             is_counter_trend=is_counter_trend,

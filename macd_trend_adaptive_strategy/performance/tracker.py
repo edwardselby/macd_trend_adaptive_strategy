@@ -4,7 +4,7 @@ from typing import Dict, Any
 from freqtrade.persistence import Trade
 
 from .db_handler import DBHandler
-from ..utils import log_messages
+from ..utils import log_performance_update, log_performance_summary
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class PerformanceTracker:
         recent_win_rate = self.get_recent_win_rate(direction)
 
         # Log after all updates are complete
-        log_messages.log_performance_update(
+        log_performance_update(
             pair=trade.pair,
             direction=direction,
             is_win=is_win,
@@ -114,7 +114,7 @@ class PerformanceTracker:
         long_profit = self.performance_tracking['long']['total_profit']
         short_profit = self.performance_tracking['short']['total_profit']
 
-        log_messages.log_performance_summary(
+        log_performance_summary(
             total_trades=total_trades,
             long_wins=long_wins,
             long_losses=long_losses,

@@ -15,8 +15,11 @@ from macd_trend_adaptive_strategy.performance.tracker import PerformanceTracker
 from macd_trend_adaptive_strategy.regime.detector import RegimeDetector
 from macd_trend_adaptive_strategy.risk_management.roi_calculator import ROICalculator
 from macd_trend_adaptive_strategy.risk_management.stoploss_calculator import StoplossCalculator
-from macd_trend_adaptive_strategy.utils import log_messages
-from macd_trend_adaptive_strategy.utils.helpers import create_trade_id, get_direction
+from macd_trend_adaptive_strategy.utils import (
+    get_direction, create_trade_id,
+    log_new_trade, log_trade_exit, log_stoploss_hit, log_roi_exit,
+    log_trade_cache_recreated
+)
 
 # Set up strategy-wide logging
 logger = logging.getLogger(__name__)
@@ -192,7 +195,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         self.trade_cache['active_trades'][trade_id] = cache_entry
 
         # Replace the existing log message with:
-        log_messages.log_new_trade(
+        log_new_trade(
             pair=pair,
             direction=direction,
             regime=regime,
@@ -229,7 +232,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         long_wr = self.performance_tracker.get_recent_win_rate('long')
         short_wr = self.performance_tracker.get_recent_win_rate('short')
 
-        log_messages.log_trade_exit(
+        log_trade_exit(
             pair=pair,
             direction=direction,
             profit_ratio=profit_ratio,
@@ -290,7 +293,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
                 'last_updated': current_timestamp
             }
 
-            log_messages.log_trade_cache_recreated(
+            log_trade_cache_recreated(
                 trade_id=trade_id,
                 direction=direction,
                 regime=regime,
@@ -305,7 +308,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         if trade.is_short:
             # For shorts, price increasing (rate > stoploss_price) triggers stoploss
             if rate >= trade_params['stoploss_price']:
-                log_messages.log_stoploss_hit(
+                log_stoploss_hit(
                     pair=trade.pair,
                     direction=trade_params['direction'],
                     current_price=rate,
@@ -318,7 +321,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         else:
             # For longs, price decreasing (rate < stoploss_price) triggers stoploss
             if rate <= trade_params['stoploss_price']:
-                log_messages.log_stoploss_hit(
+                log_stoploss_hit(
                     pair=trade.pair,
                     direction=trade_params['direction'],
                     current_price=rate,
@@ -335,7 +338,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
                           else "aligned" if trade_params['is_aligned_trend']
             else "neutral")
 
-            log_messages.log_roi_exit(
+            log_roi_exit(
                 pair=trade.pair,
                 direction=trade_params['direction'],
                 trend_type=trade_type,
