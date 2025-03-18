@@ -5,8 +5,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-# For tests, it's better to use absolute imports
-# assuming the project is in the Python path
 from macd_trend_adaptive_strategy.config import StrategyConfig, StrategyMode
 
 
@@ -115,3 +113,47 @@ def stoploss_calculator(regime_detector, strategy_config):
 
     calculator = StoplossCalculator(regime_detector, strategy_config)
     return calculator
+
+
+@pytest.fixture
+def strategy(mock_db_handler, performance_tracker, regime_detector, roi_calculator, stoploss_calculator,
+             strategy_config):
+    """
+    Create a strategy instance with mock components for integration testing.
+    This fixture sets up a strategy that closely mimics how it would interact with FreqTrade.
+    """
+    from strategy import MACDTrendAdaptiveStrategy
+
+    # Create a base strategy with FreqTrade-like config
+    config = {
+        'user_data_dir': '/tmp',
+        'runmode': 'dry_run',
+        # Add any FreqTrade settings that might affect stoploss behavior
+        'stoploss': -0.03,  # FreqTrade's global stoploss setting
+        'stoploss_on_exchange': False,
+        'trailing_stop': False,
+    }
+
+    strategy = MACDTrendAdaptiveStrategy(config)
+
+    # Replace components with our test fixtures
+    strategy.db_handler = mock_db_handler
+    strategy.performance_tracker = performance_tracker
+    strategy.regime_detector = regime_detector
+    strategy.roi_calculator = roi_calculator
+    strategy.stoploss_calculator = stoploss_calculator
+    strategy.strategy_config = strategy_config
+
+    # Initialize trade cache
+    strategy.trade_cache = {
+        'active_trades': {}
+    }
+
+    # Log key parameters for debugging
+    print(f"Strategy initialized with:")
+    print(f"- Default stoploss: {strategy.stoploss}")
+    print(f"- Static stoploss from config: {strategy.strategy_config.static_stoploss}")
+    print(f"- Dynamic stoploss enabled: {strategy.strategy_config.use_dynamic_stoploss}")
+    print(f"- Min stoploss: {strategy.strategy_config.min_stoploss}")
+
+    return strategy

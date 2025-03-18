@@ -1,3 +1,10 @@
+from datetime import datetime, timedelta
+
+from freqtrade.enums import ExitType
+
+from macd_trend_adaptive_strategy.utils import create_trade_id
+
+
 def test_calculate_dynamic_stoploss(stoploss_calculator, regime_detector):
     """Test that dynamic stoploss is calculated correctly"""
     # Ensure dynamic stoploss is enabled

@@ -1,10 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
-
 from freqtrade.enums.exittype import ExitType
+
+from macd_trend_adaptive_strategy.utils import create_trade_id
 from strategy import MACDTrendAdaptiveStrategy
+
 
 @pytest.fixture
 def strategy_config():
@@ -351,3 +353,151 @@ def test_custom_stake_amount(strategy):
 
     # Should return the proposed stake
     assert stake == proposed_stake
+
+
+def test_strategy_stoploss_integration(strategy, mock_trade, mock_short_trade):
+    """
+    Integration test to verify stoploss behavior between the strategy and FreqTrade.
+    This test simulates how FreqTrade would interact with the strategy's stoploss logic.
+    """
+    # Setup test parameters
+    pair = "BTC/USDT"
+    entry_rate = 20000
+    current_time = datetime.now()
+
+    # Configure mock trades
+    mock_trade.pair = pair
+    mock_trade.open_rate = entry_rate
+    mock_trade.open_date_utc = current_time
+    mock_trade.is_short = False
+
+    mock_short_trade.pair = pair
+    mock_short_trade.open_rate = entry_rate
+    # Use a different time for the short trade to avoid key collisions
+    short_time = current_time + timedelta(seconds=1)
+    mock_short_trade.open_date_utc = short_time
+    mock_short_trade.is_short = True
+
+    # Configure profit calculation (how FreqTrade would calculate it)
+    def long_profit(rate):
+        return (rate - entry_rate) / entry_rate
+
+    def short_profit(rate):
+        return (entry_rate - rate) / entry_rate
+
+    mock_trade.calc_profit_ratio = long_profit
+    mock_short_trade.calc_profit_ratio = short_profit
+
+    # Initialize trades in strategy
+    # This is what happens when FreqTrade creates a new trade
+    strategy.confirm_trade_entry(
+        pair, "limit", 0.1, entry_rate, "GTC",
+        current_time, "test_entry", "buy"
+    )
+
+    strategy.confirm_trade_entry(
+        pair, "limit", 0.1, entry_rate, "GTC",
+        short_time, "test_entry", "sell"
+    )
+
+    # Get trade IDs and retrieve cache entries
+    long_trade_id = create_trade_id(pair, current_time)
+    short_trade_id = create_trade_id(pair, short_time)
+
+    assert long_trade_id in strategy.trade_cache['active_trades'], "Long trade not in cache"
+    assert short_trade_id in strategy.trade_cache['active_trades'], "Short trade not in cache"
+
+    long_cache = strategy.trade_cache['active_trades'][long_trade_id]
+    short_cache = strategy.trade_cache['active_trades'][short_trade_id]
+
+    # Log stoploss values for debugging
+    print(f"Long stoploss: {long_cache['stoploss']:.4f}, price: {long_cache['stoploss_price']}")
+    print(f"Short stoploss: {short_cache['stoploss']:.4f}, price: {short_cache['stoploss_price']}")
+
+    # Verify stoploss is correctly calculated
+    assert long_cache['stoploss'] < 0, "Long stoploss should be negative"
+    assert short_cache['stoploss'] < 0, "Short stoploss should be negative"
+
+    # Now test the stoploss triggering using should_exit
+    # This is how FreqTrade would check for exit conditions
+
+    # 1. Test long trade at stoploss price
+    long_sl_price = long_cache['stoploss_price']
+    long_exit = strategy.should_exit(mock_trade, long_sl_price, current_time)
+
+    assert len(long_exit) == 1, "Long trade should exit at stoploss price"
+    assert long_exit[0].exit_type == ExitType.STOP_LOSS, "Exit should be stoploss type"
+
+    # Calculate actual profit at stoploss - should match stoploss percentage
+    long_profit_at_sl = long_profit(long_sl_price)
+    assert abs(long_profit_at_sl - long_cache['stoploss']) < 0.0001, \
+        f"Long profit at SL ({long_profit_at_sl:.4f}) should match stoploss value ({long_cache['stoploss']:.4f})"
+
+    # 2. Test short trade at stoploss price
+    short_sl_price = short_cache['stoploss_price']
+    short_exit = strategy.should_exit(mock_short_trade, short_sl_price, short_time)
+
+    assert len(short_exit) == 1, "Short trade should exit at stoploss price"
+    assert short_exit[0].exit_type == ExitType.STOP_LOSS, "Exit should be stoploss type"
+
+    # Calculate actual profit at stoploss - should match stoploss percentage
+    short_profit_at_sl = short_profit(short_sl_price)
+    assert abs(short_profit_at_sl - short_cache['stoploss']) < 0.0001, \
+        f"Short profit at SL ({short_profit_at_sl:.4f}) should match stoploss value ({short_cache['stoploss']:.4f})"
+
+    # 3. Now test the actual issue - compare with real FreqTrade logs
+    # Check if there's a difference between long and short stoploss behavior
+
+    # First check if stoploss values are symmetric (should be for same regime)
+    # Force regime detector to return neutral to eliminate alignment factors
+    strategy.regime_detector.detect_regime = lambda: "neutral"
+    strategy.regime_detector.is_counter_trend = lambda x: False
+    strategy.regime_detector.is_aligned_trend = lambda x: False
+
+    # Recreate trades with the same conditions
+    strategy.trade_cache['active_trades'] = {}
+    strategy.confirm_trade_entry(
+        pair, "limit", 0.1, entry_rate, "GTC",
+        current_time, "test_entry", "buy"
+    )
+
+    strategy.confirm_trade_entry(
+        pair, "limit", 0.1, entry_rate, "GTC",
+        short_time, "test_entry", "sell"
+    )
+
+    # Get updated cache entries
+    long_cache = strategy.trade_cache['active_trades'][create_trade_id(pair, current_time)]
+    short_cache = strategy.trade_cache['active_trades'][create_trade_id(pair, short_time)]
+
+    # In neutral regime, long and short stoploss should be identical
+    assert abs(abs(long_cache['stoploss']) - abs(short_cache['stoploss'])) < 0.0001, \
+        f"Long and short stoploss should be identical in neutral regime, but got " \
+        f"long: {long_cache['stoploss']:.4f}, short: {short_cache['stoploss']:.4f}"
+
+    # Check behavior at -3% - the specific issue from logs
+    # For a short trade, test what happens at a price that would give -3% loss
+    three_percent_price = entry_rate * 1.03  # This would be a 3% loss for shorts
+
+    # This is what FreqTrade would do - call should_exit at the current price
+    exit_at_three_percent = strategy.should_exit(
+        mock_short_trade, three_percent_price, short_time
+    )
+
+    # Calculate profit at this price
+    profit_at_three_percent = short_profit(three_percent_price)
+    assert abs(profit_at_three_percent - (-0.03)) < 0.0001, \
+        f"Profit calculation incorrect, expected -0.03, got {profit_at_three_percent:.4f}"
+
+    # This is the critical test for your issue
+    # If FreqTrade overrides to -3%, this would exit even if your stoploss is set to -1%
+    if short_cache['stoploss'] > -0.03:
+        # If our stoploss is tighter than -3% (like -1%), we shouldn't exit at -3%
+        expected_len = 0
+        assertion_msg = "Short should NOT exit at -3% if stoploss is set tighter"
+    else:
+        # If our stoploss is looser than -3%, we should exit at -3%
+        expected_len = 1
+        assertion_msg = "Short should exit at -3% if stoploss is looser"
+
+    assert len(exit_at_three_percent) == expected_len, assertion_msg
