@@ -56,15 +56,31 @@ class DBHandler:
             return
 
         try:
+            # Clear the in-memory cache first
+            if self.is_backtest:
+                self.in_memory_cache = {}
+                logger.info(f"Cleared in-memory cache for {self.strategy_name}")
+
+            # Then clear the database
             conn = self._get_db_connection()
             cursor = conn.cursor()
+
+            # Check how many records exist
+            cursor.execute(
+                "SELECT COUNT(*) FROM strategy_performance WHERE strategy = ?",
+                (self.strategy_name,)
+            )
+            count = cursor.fetchone()[0]
+
+            # Delete the records
             cursor.execute(
                 "DELETE FROM strategy_performance WHERE strategy = ?",
                 (self.strategy_name,)
             )
             conn.commit()
             conn.close()
-            logger.info(f"Cleared performance data for {self.strategy_name} before backtest")
+
+            logger.info(f"Cleared {count} performance records for {self.strategy_name} before backtest")
 
         except Exception as e:
             logger.error(f"Error clearing performance data: {e}")
@@ -83,7 +99,7 @@ class DBHandler:
             logger.error("Strategy name not set for DBHandler")
             return performance_tracking
 
-        # For backtest, just return the default structure or in-memory cache if available
+        # For backtest, check if we have in-memory cache
         if self.is_backtest and self.in_memory_cache:
             logger.debug("Using in-memory cache for performance data in backtest mode")
             return self.in_memory_cache
@@ -102,7 +118,10 @@ class DBHandler:
             conn.close()
 
             if not rows:
-                logger.info("No performance data found in database, using defaults")
+                logger.info(f"No performance data found in database for {self.strategy_name}, using defaults")
+                # Update in-memory cache for backtest mode with default values
+                if self.is_backtest:
+                    self.in_memory_cache = performance_tracking
                 return performance_tracking
 
             # Process the data

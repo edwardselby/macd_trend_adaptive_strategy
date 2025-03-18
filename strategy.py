@@ -117,7 +117,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         if self.is_backtest:
             self.db_handler.clear_performance_data()
 
-        # Initialize performance tracker
+        # Initialize performance tracker AFTER clearing data
         self.performance_tracker = PerformanceTracker(
             self.db_handler,
             max_recent_trades=self.strategy_config.max_recent_trades

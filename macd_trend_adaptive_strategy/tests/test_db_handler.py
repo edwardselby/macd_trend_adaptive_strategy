@@ -48,14 +48,24 @@ def test_clear_performance_data(mock_connect, db_handler):
     mock_connect.return_value = mock_conn
     mock_conn.cursor.return_value = mock_cursor
 
+    # Mock fetchone to return a count
+    mock_cursor.fetchone.return_value = [5]  # 5 records to be deleted
+
     # Call the method
     db_handler.clear_performance_data()
 
-    # Verify the DELETE SQL was executed with correct strategy name
-    mock_cursor.execute.assert_called_once()
-    delete_sql = mock_cursor.execute.call_args[0][0]
-    assert "DELETE FROM strategy_performance WHERE strategy = ?" in delete_sql
-    assert mock_cursor.execute.call_args[0][1] == ("TestStrategy",)
+    # Verify the execute method was called twice
+    assert mock_cursor.execute.call_count == 2
+
+    # Verify the first call was the SELECT COUNT query
+    select_call = mock_cursor.execute.call_args_list[0]
+    assert "SELECT COUNT(*)" in select_call[0][0]
+    assert select_call[0][1] == ("TestStrategy",)
+
+    # Verify the second call was the DELETE query
+    delete_call = mock_cursor.execute.call_args_list[1]
+    assert "DELETE FROM strategy_performance" in delete_call[0][0]
+    assert delete_call[0][1] == ("TestStrategy",)
 
     # Verify commit and close were called
     mock_conn.commit.assert_called_once()
@@ -132,3 +142,62 @@ def test_save_load_performance_data(mock_connect, db_handler):
     assert loaded_data['short']['consecutive_losses'] == 1
     assert loaded_data['short']['last_trades'] == [0, 0, 1]
     assert loaded_data['short']['total_profit'] == 0.1
+
+
+@patch('sqlite3.connect')
+def test_backtest_performance_clearing(mock_connect, mock_config):
+    """Test that performance data is cleared when in backtest mode"""
+    # Create a backtest config
+    backtest_config = mock_config.copy()
+    backtest_config['runmode'] = 'backtest'
+
+    # First, create a db_handler with backtest config
+    handler = DBHandler(backtest_config)
+    handler.set_strategy_name("TestStrategy")
+
+    # Setup mock connection and cursor
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_connect.return_value = mock_conn
+    mock_conn.cursor.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = [10]  # 10 records to be deleted
+
+    # Mock the in_memory_cache
+    handler.in_memory_cache = {'test': 'data'}
+
+    # Call clear_performance_data
+    handler.clear_performance_data()
+
+    # Verify the in_memory_cache was cleared
+    assert handler.in_memory_cache == {}
+
+    # Verify both SELECT and DELETE queries were executed
+    assert mock_cursor.execute.call_count == 2
+
+    # Verify commit was called
+    mock_conn.commit.assert_called_once()
+
+    # Now test the whole initialization flow by simulating strategy init
+    # Reset mocks
+    mock_cursor.reset_mock()
+    mock_conn.reset_mock()
+    mock_connect.reset_mock()
+    mock_connect.return_value = mock_conn
+    mock_conn.cursor.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = [5]
+
+    # Create a new handler and load data (this would be part of PerformanceTracker init)
+    new_handler = DBHandler(backtest_config)
+    new_handler.set_strategy_name("TestStrategy")
+    new_handler.clear_performance_data()
+
+    # Now load data - this would normally be called by PerformanceTracker
+    data = new_handler.load_performance_data()
+
+    # Verify the returned data has empty/default values
+    assert data['long']['wins'] == 0
+    assert data['long']['losses'] == 0
+    assert data['long']['last_trades'] == []
+    assert data['short']['wins'] == 0
+    assert data['short']['losses'] == 0
+    assert data['short']['last_trades'] == []

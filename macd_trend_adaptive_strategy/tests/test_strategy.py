@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from freqtrade.enums.exittype import ExitType
@@ -813,3 +813,32 @@ def test_stoploss_recalculation_on_cache_miss(strategy, mock_trade):
     # Should return the same value as before
     assert cached_sl == recalculated_sl, \
         f"Subsequent call should return cached value ({recalculated_sl}), but got {cached_sl}"
+
+
+def test_strategy_backtest_initialization():
+    """Test that strategy properly clears performance data when initializing in backtest mode"""
+    from strategy import MACDTrendAdaptiveStrategy
+
+    # Create a mock config with backtest mode
+    config = {
+        'user_data_dir': '/tmp',
+        'runmode': 'backtest'
+    }
+
+    # Mock the DBHandler to verify it's called correctly
+    with patch('strategy.DBHandler') as mock_db_handler_class:
+        # Create mock instances
+        mock_db_handler = MagicMock()
+        mock_db_handler_class.return_value = mock_db_handler
+
+        # Create the strategy instance
+        strategy = MACDTrendAdaptiveStrategy(config)
+
+        # Verify DBHandler was initialized
+        mock_db_handler_class.assert_called_once_with(config)
+
+        # Verify set_strategy_name was called with correct name
+        mock_db_handler.set_strategy_name.assert_called_once_with('MACDTrendAdaptiveStrategy')
+
+        # Verify clear_performance_data was called
+        mock_db_handler.clear_performance_data.assert_called_once()
