@@ -98,7 +98,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         self.strategy_config = StrategyConfig(self.STRATEGY_MODE)
 
         # Set a realistic stoploss value (still used as the initial/base stoploss)
-        self.stoploss = -0.15
+        self.stoploss = self.strategy_config.static_stoploss
 
         # Apply startup candle count setting
         self.startup_candle_count = self.strategy_config.startup_candle_count
