@@ -1,6 +1,6 @@
 import logging
 
-from regime import RegimeDetector
+from ..regime import RegimeDetector
 
 logger = logging.getLogger(__name__)
 

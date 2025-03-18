@@ -3,7 +3,7 @@ from typing import Dict, Any
 
 from freqtrade.persistence import Trade
 
-from performance import DBHandler
+from .db_handler import DBHandler
 
 logger = logging.getLogger(__name__)
 

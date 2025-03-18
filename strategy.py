@@ -3,19 +3,19 @@ from datetime import datetime
 from typing import List, Optional
 
 import pandas as pd
-
 from freqtrade.enums.exittype import ExitType
 from freqtrade.persistence import Trade
 from freqtrade.strategy.interface import IStrategy, ExitCheckTuple
-from config.mode_enum import StrategyMode
-from config.strategy_config import StrategyConfig
-from indicators.technical import calculate_indicators, populate_entry_signals
-from performance.db_handler import DBHandler
-from performance.tracker import PerformanceTracker
-from regime.detector import RegimeDetector
-from risk_management.roi_calculator import ROICalculator
-from risk_management.stoploss_calculator import StoplossCalculator
-from utils.helpers import create_trade_id, get_direction
+
+from .config.mode_enum import StrategyMode
+from .config.strategy_config import StrategyConfig
+from .indicators.technical import calculate_indicators, populate_entry_signals
+from .performance.db_handler import DBHandler
+from .performance.tracker import PerformanceTracker
+from .regime.detector import RegimeDetector
+from .risk_management.roi_calculator import ROICalculator
+from .risk_management.stoploss_calculator import StoplossCalculator
+from .utils.helpers import create_trade_id, get_direction
 
 logger = logging.getLogger(__name__)
 

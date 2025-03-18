@@ -1,4 +1,4 @@
 __all__ = ['PerformanceTracker', 'DBHandler']
 
-from performance.db_handler import DBHandler
-from performance.tracker import PerformanceTracker
+from .db_handler import DBHandler
+from .tracker import PerformanceTracker

@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+# For tests, it's better to use absolute imports
+# assuming the project is in the Python path
 from config import StrategyConfig, StrategyMode
 
 

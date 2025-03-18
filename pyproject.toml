@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "macd-trend-adaptive-strategy"
+version = "0.1.0"
+description = "Enhanced MACD Strategy with adaptive ROI and dynamic stoploss for FreqTrade"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "*"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+freqtrade = "^2025.2"
+pandas = "^2.0.0"
+numpy = "^1.24.0"
+ta-lib = "^0.4.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.3.1"
+pytest-mock = "^3.10.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

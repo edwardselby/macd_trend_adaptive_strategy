@@ -1,7 +1,7 @@
 import logging
 from typing import Literal
 
-from performance import PerformanceTracker
+from ..performance import PerformanceTracker
 
 logger = logging.getLogger(__name__)
 

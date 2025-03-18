@@ -1,7 +1,7 @@
 import logging
 
-from performance import PerformanceTracker
-from regime import RegimeDetector
+from ..performance import PerformanceTracker
+from ..regime import RegimeDetector
 
 logger = logging.getLogger(__name__)
 

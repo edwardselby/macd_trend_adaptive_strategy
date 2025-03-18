@@ -1,4 +1,5 @@
-from config import StrategyMode, TimeframeConfig
+from .mode_enum import StrategyMode
+from .timeframe_config import TimeframeConfig
 
 
 class StrategyConfig:
