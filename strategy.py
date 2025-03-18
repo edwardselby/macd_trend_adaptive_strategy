@@ -80,7 +80,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
 
     # Required settings
     process_only_new_candles = True
-    use_custom_stoploss = True  # Enable custom stoploss mechanism
+    use_custom_stoploss = True
     position_adjustment_enable = False
     use_exit_signal = True
     ignore_roi_if_entry_signal = False
@@ -111,7 +111,12 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         self.db_handler.set_strategy_name(self.__class__.__name__)
 
         # Check if we're in backtest mode
-        self.is_backtest = config.get('runmode') in ('backtest', 'hyperopt')
+        self.is_backtest = (
+            config.get('runmode') in ('backtest', 'hyperopt') or
+            config.get('backtest', False) or  # This parameter exists in backtest config
+            'timerange' in config or  # Timerange is set for backtests
+            'export' in config  # Export is typically set for backtests
+        )
 
         # Clear performance data at the start of each backtest
         if self.is_backtest:
