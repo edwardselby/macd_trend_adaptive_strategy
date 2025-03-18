@@ -100,7 +100,7 @@ def test_confirm_trade_entry(strategy, mock_db_handler):
 
 
 def test_should_exit_stoploss_hit(strategy, mock_trade):
-    """Test should_exit method when stoploss is hit"""
+    """Test custom_stoploss method when stoploss is hit"""
     # Setup
     mock_trade.pair = "BTC/USDT"
     mock_trade.open_rate = 20000
@@ -132,18 +132,16 @@ def test_should_exit_stoploss_hit(strategy, mock_trade):
         'last_updated': int(datetime.now().timestamp())
     }
 
-    # Test with price at stoploss level
-    exit_signals = strategy.should_exit(mock_trade, 19400, datetime.now())
+    # Test the stoploss value from custom_stoploss
+    current_time = datetime.now()
+    current_profit = -0.03
+    stoploss = strategy.custom_stoploss(mock_trade.pair, mock_trade, current_time, 19400, current_profit)
 
-    # Should return a stoploss exit signal
-    assert len(exit_signals) == 1
-    assert exit_signals[0].exit_type == ExitType.STOP_LOSS
-    assert exit_signals[0].exit_reason == "dynamic_stoploss"
+    # Should return the correct stoploss value
+    assert stoploss == -0.03
 
-    # Test with price above stoploss level
-    exit_signals = strategy.should_exit(mock_trade, 19500, datetime.now())
-
-    # Should not exit
+    # Confirm that should_exit doesn't return a stoploss signal
+    exit_signals = strategy.should_exit(mock_trade, 19400, current_time)
     assert len(exit_signals) == 0
 
 
@@ -301,25 +299,91 @@ def test_custom_stoploss(strategy, mock_trade):
         'is_counter_trend': False,
         'is_aligned_trend': True,
         'regime': 'bullish',
-        'last_updated': int(datetime.now().timestamp())
+        'last_updated': int(current_time.timestamp())
     }
 
-    # Call method
+    # Call method with trade in cache
     stoploss = strategy.custom_stoploss(
         pair, mock_trade, current_time, current_rate, current_profit
     )
 
-    # Verify stoploss value
+    # Verify stoploss value for cached trade
     assert stoploss == expected_stoploss
 
     # Test with trade not in cache
     strategy.trade_cache['active_trades'] = {}
 
-    # Should return the default stoploss
+    # Should calculate a fresh stoploss value
     stoploss = strategy.custom_stoploss(
         pair, mock_trade, current_time, current_rate, current_profit
     )
-    assert stoploss == strategy.stoploss
+
+    # Verify calculated stoploss is reasonable
+    assert stoploss < 0  # Should be negative
+    assert strategy.strategy_config.max_stoploss <= stoploss <= strategy.strategy_config.min_stoploss
+
+    # Verify trade added to cache
+    recalculated_trade_id = create_trade_id(pair, mock_trade.open_date_utc)
+    assert recalculated_trade_id in strategy.trade_cache['active_trades']
+    assert 'stoploss' in strategy.trade_cache['active_trades'][recalculated_trade_id]
+
+
+def test_custom_stoploss_long(strategy, mock_trade):
+    """Test custom_stoploss method for long positions"""
+    # Setup
+    pair = "BTC/USDT"
+    current_time = datetime.now()
+    current_rate = 20500
+    current_profit = 0.025
+
+    # Configure as a long trade
+    mock_trade.is_short = False
+
+    # Clear cache to force recalculation
+    strategy.trade_cache['active_trades'] = {}
+
+    # Calculate stoploss
+    stoploss = strategy.custom_stoploss(
+        pair, mock_trade, current_time, current_rate, current_profit
+    )
+
+    # Verify bounds
+    assert strategy.strategy_config.max_stoploss <= stoploss <= strategy.strategy_config.min_stoploss
+
+    # Verify stoploss price is calculated correctly
+    stoploss_price = strategy.stoploss_calculator.calculate_stoploss_price(
+        mock_trade.open_rate, stoploss, mock_trade.is_short
+    )
+    assert stoploss_price < mock_trade.open_rate  # For longs, stoploss price should be below entry
+
+
+def test_custom_stoploss_short(strategy, mock_short_trade):
+    """Test custom_stoploss method for short positions"""
+    # Setup
+    pair = "BTC/USDT"
+    current_time = datetime.now()
+    current_rate = 20500
+    current_profit = 0.025
+
+    # Configure as a short trade
+    mock_short_trade.is_short = True
+
+    # Clear cache to force recalculation
+    strategy.trade_cache['active_trades'] = {}
+
+    # Calculate stoploss
+    stoploss = strategy.custom_stoploss(
+        pair, mock_short_trade, current_time, current_rate, current_profit
+    )
+
+    # Verify bounds
+    assert strategy.strategy_config.max_stoploss <= stoploss <= strategy.strategy_config.min_stoploss
+
+    # Verify stoploss price is calculated correctly
+    stoploss_price = strategy.stoploss_calculator.calculate_stoploss_price(
+        mock_short_trade.open_rate, stoploss, mock_short_trade.is_short
+    )
+    assert stoploss_price > mock_short_trade.open_rate  # For shorts, stoploss price should be above entry
 
 
 def test_leverage(strategy):

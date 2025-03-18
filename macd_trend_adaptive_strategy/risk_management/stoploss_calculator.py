@@ -50,10 +50,20 @@ class StoplossCalculator:
         else:
             adjusted_stoploss = base_stoploss
 
-        final_stoploss = max(
-            self.config.min_stoploss,
-            min(adjusted_stoploss, self.config.max_stoploss)
-        )
+        # For stoploss (negative values):
+        # -0.01 (min_stoploss) is the smallest loss allowed (closest to zero)
+        # -0.05 (max_stoploss) is the largest loss allowed (furthest from zero)
+
+        # Bound the stoploss within min and max limits
+        if adjusted_stoploss > self.config.min_stoploss:
+            # If stoploss is too small (closer to zero than min allows)
+            final_stoploss = self.config.min_stoploss
+        elif adjusted_stoploss < self.config.max_stoploss:
+            # If stoploss is too large (further from zero than max allows)
+            final_stoploss = self.config.max_stoploss
+        else:
+            # Within acceptable range
+            final_stoploss = adjusted_stoploss
 
         log_stoploss_calculation(
             direction=direction,
@@ -70,7 +80,6 @@ class StoplossCalculator:
         )
 
         return final_stoploss
-
 
     def calculate_stoploss_price(self, entry_rate: float, stoploss: float, is_short: bool) -> float:
         """

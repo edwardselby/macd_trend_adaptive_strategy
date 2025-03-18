@@ -98,7 +98,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         self.strategy_config = StrategyConfig(self.STRATEGY_MODE)
 
         # Set a realistic stoploss value (still used as the initial/base stoploss)
-        self.stoploss = self.strategy_config.static_stoploss
+        self.stoploss = -0.15
 
         # Apply startup candle count setting
         self.startup_candle_count = self.strategy_config.startup_candle_count
@@ -246,8 +246,8 @@ class MACDTrendAdaptiveStrategy(IStrategy):
 
     def should_exit(self, trade: Trade, rate: float, date: datetime, **kwargs) -> List:
         """
-        Override should_exit to use our adaptive ROI and stoploss logic
-        for every trade check
+        Override should_exit to use our adaptive ROI logic.
+        Let FreqTrade handle stoploss through custom_stoploss.
         """
         # Get current profit
         current_profit = trade.calc_profit_ratio(rate)
@@ -257,81 +257,13 @@ class MACDTrendAdaptiveStrategy(IStrategy):
 
         # If we don't have this trade in our cache, we need to recreate its parameters
         if trade_id not in self.trade_cache['active_trades']:
-            # Get trade direction
-            direction = get_direction(trade.is_short)
-
-            # Update ROI cache if needed
-            current_timestamp = int(date.timestamp())
-            self.roi_calculator.update_roi_cache(current_timestamp)
-
-            # Get ROI for this trade
-            roi = self.roi_calculator.get_trade_roi(direction)
-
-            # Calculate dynamic stoploss
-            stoploss = self.stoploss_calculator.calculate_dynamic_stoploss(roi, direction)
-
-            # Calculate stoploss price
-            stoploss_price = self.stoploss_calculator.calculate_stoploss_price(
-                trade.open_rate, stoploss, trade.is_short
-            )
-
-            # Get regime info
-            regime = self.regime_detector.detect_regime()
-            is_counter_trend = self.regime_detector.is_counter_trend(direction)
-            is_aligned_trend = self.regime_detector.is_aligned_trend(direction)
-
-            # Add trade to cache
-            self.trade_cache['active_trades'][trade_id] = {
-                'direction': direction,
-                'entry_rate': trade.open_rate,
-                'roi': roi,
-                'stoploss': stoploss,
-                'stoploss_price': stoploss_price,
-                'is_counter_trend': is_counter_trend,
-                'is_aligned_trend': is_aligned_trend,
-                'regime': regime,
-                'last_updated': current_timestamp
-            }
-
-            log_trade_cache_recreated(
-                trade_id=trade_id,
-                direction=direction,
-                regime=regime,
-                roi=roi,
-                stoploss=stoploss
-            )
+            # Call custom_stoploss to ensure cache is populated
+            _ = self.custom_stoploss(trade.pair, trade, date, rate, current_profit)
 
         # Get trade parameters from cache
         trade_params = self.trade_cache['active_trades'][trade_id]
 
-        # First check stoploss
-        if trade.is_short:
-            # For shorts, price increasing (rate > stoploss_price) triggers stoploss
-            if rate >= trade_params['stoploss_price']:
-                log_stoploss_hit(
-                    pair=trade.pair,
-                    direction=trade_params['direction'],
-                    current_price=rate,
-                    stoploss_price=trade_params['stoploss_price'],
-                    entry_price=trade_params['entry_rate'],
-                    profit_ratio=current_profit,
-                    regime=trade_params['regime']
-                )
-                return [ExitCheckTuple(exit_type=ExitType.STOP_LOSS, exit_reason="dynamic_stoploss")]
-        else:
-            # For longs, price decreasing (rate < stoploss_price) triggers stoploss
-            if rate <= trade_params['stoploss_price']:
-                log_stoploss_hit(
-                    pair=trade.pair,
-                    direction=trade_params['direction'],
-                    current_price=rate,
-                    stoploss_price=trade_params['stoploss_price'],
-                    entry_price=trade_params['entry_rate'],
-                    profit_ratio=current_profit,
-                    regime=trade_params['regime']
-                )
-                return [ExitCheckTuple(exit_type=ExitType.STOP_LOSS, exit_reason="dynamic_stoploss")]
-
+        # ONLY check for ROI exit - no stoploss check here
         # Check for ROI exit
         if current_profit >= trade_params['roi']:
             trade_type = ("countertrend" if trade_params['is_counter_trend']
@@ -364,17 +296,60 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         """
         Custom stoploss logic, returning the new stoploss percentage.
 
-        This is required by FreqTrade's API but we actually handle the stoploss logic
-        in should_exit for more control.
+        For FreqTrade, stoploss values are always negative percentages (like -0.05 for 5%)
+        A "tighter" stoploss for shorts is actually closer to zero (like -0.01)
         """
         # Get trade ID
         trade_id = create_trade_id(pair, trade.open_date_utc)
 
-        # If we don't have this trade in our cache, return the default stoploss
+        # If not in cache, recalculate
         if trade_id not in self.trade_cache['active_trades']:
-            return self.stoploss
+            direction = get_direction(trade.is_short)
 
-        # Otherwise return the cached stoploss value
+            # Update ROI cache if needed
+            current_timestamp = int(current_time.timestamp())
+            self.roi_calculator.update_roi_cache(current_timestamp)
+
+            # Get ROI for this trade
+            roi = self.roi_calculator.get_trade_roi(direction)
+
+            # Calculate dynamic stoploss
+            stoploss = self.stoploss_calculator.calculate_dynamic_stoploss(roi, direction)
+
+            # Get regime info
+            regime = self.regime_detector.detect_regime()
+            is_counter_trend = self.regime_detector.is_counter_trend(direction)
+            is_aligned_trend = self.regime_detector.is_aligned_trend(direction)
+
+            # Calculate stoploss price
+            stoploss_price = self.stoploss_calculator.calculate_stoploss_price(
+                trade.open_rate, stoploss, trade.is_short
+            )
+
+            # Add trade to cache
+            self.trade_cache['active_trades'][trade_id] = {
+                'direction': direction,
+                'entry_rate': trade.open_rate,
+                'roi': roi,
+                'stoploss': stoploss,
+                'stoploss_price': stoploss_price,
+                'is_counter_trend': is_counter_trend,
+                'is_aligned_trend': is_aligned_trend,
+                'regime': regime,
+                'last_updated': current_timestamp
+            }
+
+            log_trade_cache_recreated(
+                trade_id=trade_id,
+                direction=direction,
+                regime=regime,
+                roi=roi,
+                stoploss=stoploss
+            )
+
+            return stoploss
+
+        # Return the cached stoploss value
         return self.trade_cache['active_trades'][trade_id]['stoploss']
 
     def custom_stake_amount(self, pair: str, current_time: datetime, current_rate: float,
