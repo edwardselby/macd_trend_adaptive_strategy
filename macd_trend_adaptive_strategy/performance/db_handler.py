@@ -14,6 +14,16 @@ class DBHandler:
         """Initialize with FreqTrade config"""
         self.config = config
         self.strategy_name = None  # Will be set by the strategy
+        self.is_backtest = config.get('runmode') in ('backtest', 'hyperopt')
+
+        # Add caching for backtest mode
+        if self.is_backtest:
+            self.in_memory_cache = {}
+            self.last_save_time = int(datetime.now().timestamp())
+            self.trades_since_last_save = 0
+            self.backtest_save_interval = 300  # 5 minutes
+            self.backtest_trade_batch = 100  # Save every 100 trades
+            logger.info(f"DBHandler initialized in backtest mode with optimized saving")
 
     def set_strategy_name(self, name: str) -> None:
         """Set the strategy name for database operations"""
@@ -73,6 +83,11 @@ class DBHandler:
             logger.error("Strategy name not set for DBHandler")
             return performance_tracking
 
+        # For backtest, just return the default structure or in-memory cache if available
+        if self.is_backtest and self.in_memory_cache:
+            logger.debug("Using in-memory cache for performance data in backtest mode")
+            return self.in_memory_cache
+
         try:
             conn = self._get_db_connection()
             self._setup_db_table(conn)
@@ -100,6 +115,11 @@ class DBHandler:
                     performance_tracking[direction][metric] = [int(x) for x in value.split(',') if x]
 
             logger.info(f"Loaded performance tracking from database: {performance_tracking}")
+
+            # Update in-memory cache for backtest mode
+            if self.is_backtest:
+                self.in_memory_cache = performance_tracking
+
             return performance_tracking
 
         except Exception as e:
@@ -112,10 +132,28 @@ class DBHandler:
             logger.error("Strategy name not set for DBHandler")
             return
 
+        # For backtest mode, optimize saving frequency
+        if self.is_backtest:
+            self.in_memory_cache = performance_tracking
+            self.trades_since_last_save += 1
+            current_time = int(datetime.now().timestamp())
+
+            # Only save periodically or after batch of trades
+            if (current_time - self.last_save_time < self.backtest_save_interval and
+                    self.trades_since_last_save < self.backtest_trade_batch):
+                return
+
+            logger.debug(f"Saving performance data after {self.trades_since_last_save} trades")
+            self.last_save_time = current_time
+            self.trades_since_last_save = 0
+
         try:
             conn = self._get_db_connection()
             self._setup_db_table(conn)
             cursor = conn.cursor()
+
+            # Use a single transaction for better performance
+            conn.execute("BEGIN TRANSACTION")
 
             now = datetime.now().isoformat()
 

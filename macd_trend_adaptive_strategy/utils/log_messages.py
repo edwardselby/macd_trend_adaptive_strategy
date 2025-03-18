@@ -60,3 +60,107 @@ def log_stoploss_price(direction, entry_price, stoploss_pct, stoploss_price):
 def log_trade_cache_recreated(trade_id, direction, regime, roi, stoploss):
     """Log when a trade is recreated in cache with formatted single-line output"""
     logger.info(f"TRADE CACHE | Recreated {trade_id} | {direction} | {regime} regime | ROI: {roi:.2%} | SL: {stoploss:.2%}")
+
+
+# Configuration and Initialization Messages
+def log_strategy_initialization(mode, timeframe, indicators, roi_config, stoploss_config):
+    """Log strategy initialization parameters"""
+    logger.info(
+        f"STRATEGY INIT | Mode: {mode} | Timeframe: {timeframe} | "
+        f"MACD: {indicators['fast']}/{indicators['slow']}/{indicators['signal']} | "
+        f"ROI: {roi_config['min']:.2%}-{roi_config['max']:.2%} | "
+        f"SL: {stoploss_config['min']:.2%}-{stoploss_config['max']:.2%}"
+    )
+
+
+def log_parameter_override(param, old_value, new_value):
+    """Log when a parameter is overridden from external config"""
+    logger.info(f"CONFIG OVERRIDE | {param} | {old_value} → {new_value}")
+
+
+def log_backtest_run_start(pairs_count, timeframe, timerange):
+    """Log the start of a backtest run"""
+    logger.info(f"BACKTEST START | Pairs: {pairs_count} | Timeframe: {timeframe} | Range: {timerange}")
+
+
+def log_hyperopt_run_start(spaces, epochs, timerange):
+    """Log the start of a hyperopt run"""
+    logger.info(f"HYPEROPT START | Spaces: {spaces} | Epochs: {epochs} | Range: {timerange}")
+
+
+# Regime Detection Extensions
+def log_regime_transition(old_regime, new_regime, long_wr, short_wr):
+    """Log when market regime changes"""
+    if old_regime != new_regime:
+        logger.info(
+            f"REGIME CHANGE | {old_regime} → {new_regime} | "
+            f"Long WR: {long_wr:.2f} | Short WR: {short_wr:.2f}"
+        )
+
+
+# Trade Management Extensions
+def log_trade_cache_miss(trade_id, pair, direction):
+    """Log when a trade is not found in cache"""
+    logger.warning(f"TRADE CACHE MISS | {trade_id} | {pair} | {direction}")
+
+
+def log_stoploss_adjustment(pair, direction, initial_sl, final_sl, reason):
+    """Log when stoploss is adjusted after trade open"""
+    logger.info(
+        f"SL ADJUST | {pair} | {direction} | "
+        f"{initial_sl:.2%} → {final_sl:.2%} | Reason: {reason}"
+    )
+
+
+def log_roi_adjustment(pair, direction, initial_roi, final_roi, reason):
+    """Log when ROI is adjusted after trade open"""
+    logger.info(
+        f"ROI ADJUST | {pair} | {direction} | "
+        f"{initial_roi:.2%} → {final_roi:.2%} | Reason: {reason}"
+    )
+
+
+# Performance and Statistics
+def log_win_rate_changes(direction, old_wr, new_wr, trades_count):
+    """Log significant changes in win rate"""
+    if abs(new_wr - old_wr) > 0.1:  # Only log significant changes
+        logger.info(
+            f"WIN RATE CHANGE | {direction} | "
+            f"{old_wr:.2f} → {new_wr:.2f} | Trades: {trades_count}"
+        )
+
+
+def log_backtest_progress(completed_pairs, total_pairs, trades_count, win_rate, profit):
+    """Log backtest progress for long-running tests"""
+    percent_complete = (completed_pairs / total_pairs) * 100 if total_pairs > 0 else 0
+    logger.info(
+        f"BACKTEST PROGRESS | {percent_complete:.1f}% | "
+        f"Pairs: {completed_pairs}/{total_pairs} | Trades: {trades_count} | "
+        f"Win Rate: {win_rate:.2f} | Profit: {profit:.2%}"
+    )
+
+
+def log_memory_usage():
+    """Log memory usage for long-running processes"""
+    import os
+    import psutil
+
+    process = psutil.Process(os.getpid())
+    memory_mb = process.memory_info().rss / 1024 / 1024
+    logger.info(f"MEMORY USAGE | {memory_mb:.1f} MB")
+
+
+# Trade Analysis Messages
+def log_trade_analysis(pair, direction, profit, duration_min, entry_reason, exit_reason):
+    """Log detailed trade analysis"""
+    logger.info(
+        f"TRADE ANALYSIS | {pair} | {direction} | Profit: {profit:.2%} | "
+        f"Duration: {duration_min}m | Entry: {entry_reason} | Exit: {exit_reason}"
+    )
+
+
+def log_failed_signal(pair, timeframe, direction, reason):
+    """Log when a signal is generated but filtered out"""
+    logger.debug(
+        f"SIGNAL FILTERED | {pair} | {timeframe} | {direction} | Reason: {reason}"
+    )

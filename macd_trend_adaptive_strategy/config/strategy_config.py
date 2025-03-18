@@ -1,9 +1,75 @@
+import logging
+
 from .mode_enum import StrategyMode
 from .timeframe_config import TimeframeConfig
 
+logger = logging.getLogger(__name__)
+
 
 class StrategyConfig:
-    """Configuration class to store and manage strategy parameters"""
+    """
+    # Risk Management Documentation for MACD Trend Adaptive Strategy
+
+    ## Market Regime Detection
+
+    The strategy detects market regimes based on the relative performance of long vs. short trades:
+
+    - **Bullish Regime**: Long trades perform significantly better than short trades
+    - **Bearish Regime**: Short trades perform significantly better than long trades
+    - **Neutral Regime**: No significant difference in performance between long and short trades
+
+    ## Trade Alignment
+
+    Trades are classified based on their alignment with the detected market regime:
+
+    - **Aligned Trades**: Long trades in bullish regime or short trades in bearish regime
+    - **Counter-Trend Trades**: Short trades in bullish regime or long trades in bearish regime
+    - **Neutral Trades**: Any trade during a neutral regime
+
+    ## Risk Factor System
+
+    The strategy applies different factors to ROI and stoploss based on trade alignment:
+
+    ### ROI Factors:
+    - **counter_trend_factor**: Applied to ROI for counter-trend trades
+      - Should be < 1.0 to reduce ROI target (take profits sooner)
+      - Example: If base ROI is 5% and factor is 0.6, counter-trend ROI = 3%
+
+    - **aligned_trend_factor**: Applied to ROI for aligned trades
+      - Should be > 1.0 to increase ROI target (allow more room for profit)
+      - Example: If base ROI is 5% and factor is 1.2, aligned-trend ROI = 6%
+
+    ### Stoploss Factors:
+    - **counter_trend_stoploss_factor**: Applied to stoploss for counter-trend trades
+      - Should be < 1.0 to make stoploss less negative (tighter protection)
+      - Example: If base stoploss is -3% and factor is 0.7, counter-trend stoploss = -2.1%
+
+    - **aligned_trend_stoploss_factor**: Applied to stoploss for aligned trades
+      - Should be > 1.0 to make stoploss more negative (looser protection)
+      - Example: If base stoploss is -3% and factor is 1.2, aligned-trend stoploss = -3.6%
+
+    ## Risk Management Principles
+
+    The strategy applies these fundamental principles:
+
+    1. **Counter-trend trades** have:
+       - Lower ROI targets (take profits earlier)
+       - Tighter stoplosses (exit losing trades faster)
+
+    2. **Aligned trades** have:
+       - Higher ROI targets (let profits run longer)
+       - Looser stoplosses (give trades more room to develop)
+
+    3. **Win rate adaptation**:
+       - ROI targets scale dynamically based on recent win rates
+       - Higher win rates increase ROI targets
+       - Lower win rates decrease ROI targets
+
+    4. **Risk-reward ratio**:
+       - Stoploss values are calculated using ROI targets and risk_reward_ratio
+       - Default risk_reward_ratio of 0.67 gives 1:1.5 risk:reward
+       - Example: With ROI = 3% and ratio = 0.67, stoploss = -2%
+    """
 
     def __init__(self, mode: StrategyMode = StrategyMode.DEFAULT, timeframe: str = '15m'):
         # Store the timeframe
@@ -55,6 +121,9 @@ class StrategyConfig:
 
         # Apply specific configuration based on mode
         self._apply_config(mode)
+
+        # Validate risk factors
+        self._validate_risk_factors()
 
     def _apply_config(self, mode: StrategyMode):
         """Apply specific parameter set based on the selected mode/timeframe"""
@@ -119,3 +188,74 @@ class StrategyConfig:
             # Similar implementation as 1m with 1h values
             # ... (implementation code here)
             pass
+
+    def _validate_risk_factors(self):
+        """
+        Validate that risk factors maintain proper relationships:
+
+        For ROI factors:
+        - Counter-trend trades should have lower ROI targets (take profits faster)
+        - Counter-trend factor should be < 1.0
+        - Aligned-trend factor should be > 1.0
+
+        For stoploss factors:
+        - Counter-trend trades should have tighter stoploss (less negative)
+        - Counter-trend factor should be < 1.0 to make the stoploss less negative
+        - Aligned-trend factor should be > 1.0 to make the stoploss more negative
+        """
+        # Validate ROI factors
+        if self.counter_trend_factor >= 1.0:
+            logger.warning(
+                f"Counter-trend ROI factor ({self.counter_trend_factor}) should be less than 1.0 "
+                f"for faster profit taking. Adjusting to 0.7."
+            )
+            self.counter_trend_factor = 0.7
+
+        if self.aligned_trend_factor <= 1.0:
+            logger.warning(
+                f"Aligned-trend ROI factor ({self.aligned_trend_factor}) should be greater than 1.0 "
+                f"for higher profit targets. Adjusting to 1.2."
+            )
+            self.aligned_trend_factor = 1.2
+
+        if self.counter_trend_factor >= self.aligned_trend_factor:
+            logger.warning(
+                f"Counter-trend ROI factor ({self.counter_trend_factor}) should be lower than "
+                f"aligned-trend factor ({self.aligned_trend_factor}). Adjusting."
+            )
+            # Set counter-trend to 60% of aligned-trend
+            self.counter_trend_factor = self.aligned_trend_factor * 0.6
+
+        # For stoploss factors, we need to consider that stoplosses are negative values
+        # Counter-trend trades should have tighter (less negative) stoploss
+
+        # For stoploss, there are two ways to implement the factors:
+        # 1. Like ROI, where counter_trend_factor < 1.0 makes stoploss smaller (tighter)
+        # 2. Opposite of ROI, where counter_trend_factor > 1.0 makes stoploss smaller (tighter)
+
+        # Based on the implementation in StoplossCalculator.calculate_dynamic_stoploss,
+        # it seems approach #1 is used, where the factor is directly multiplied with the stoploss
+
+        # Adjusted validation based on stoploss implementation in the code
+        if self.counter_trend_stoploss_factor >= 1.0:
+            logger.warning(
+                f"Counter-trend stoploss factor ({self.counter_trend_stoploss_factor}) should be less "
+                f"than 1.0 for tighter stoploss. Adjusting to 0.7."
+            )
+            self.counter_trend_stoploss_factor = 0.7
+
+        if self.aligned_trend_stoploss_factor <= 1.0:
+            logger.warning(
+                f"Aligned-trend stoploss factor ({self.aligned_trend_stoploss_factor}) should be "
+                f"greater than 1.0 for looser stoploss. Adjusting to 1.2."
+            )
+            self.aligned_trend_stoploss_factor = 1.2
+
+        if self.counter_trend_stoploss_factor >= self.aligned_trend_stoploss_factor:
+            logger.warning(
+                f"Counter-trend stoploss factor ({self.counter_trend_stoploss_factor}) should be "
+                f"lower than aligned-trend factor ({self.aligned_trend_stoploss_factor}) "
+                f"for tighter stoploss. Adjusting."
+            )
+            # Set counter-trend to 60% of aligned-trend for tighter stoploss
+            self.counter_trend_stoploss_factor = self.aligned_trend_stoploss_factor * 0.6

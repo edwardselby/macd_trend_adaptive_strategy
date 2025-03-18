@@ -18,7 +18,7 @@ from macd_trend_adaptive_strategy.risk_management.stoploss_calculator import Sto
 from macd_trend_adaptive_strategy.utils import (
     get_direction, create_trade_id,
     log_new_trade, log_trade_exit, log_stoploss_hit, log_roi_exit,
-    log_trade_cache_recreated
+    log_trade_cache_recreated, log_strategy_initialization,
 )
 
 # Set up strategy-wide logging
@@ -147,7 +147,24 @@ class MACDTrendAdaptiveStrategy(IStrategy):
             'active_trades': {}
         }
 
-        logger.info(f"Strategy initialized with mode: {self.STRATEGY_MODE}")
+        # Log strategy initialization details
+        log_strategy_initialization(
+            mode=self.STRATEGY_MODE,
+            timeframe=self.timeframe,
+            indicators={
+                'fast': self.strategy_config.fast_length,
+                'slow': self.strategy_config.slow_length,
+                'signal': self.strategy_config.signal_length
+            },
+            roi_config={
+                'min': self.strategy_config.min_roi,
+                'max': self.strategy_config.max_roi
+            },
+            stoploss_config={
+                'min': self.strategy_config.min_stoploss,
+                'max': self.strategy_config.max_stoploss
+            }
+        )
 
     def confirm_trade_entry(self, pair: str, order_type: str, amount: float, rate: float,
                             time_in_force: str, current_time: datetime, entry_tag: Optional[str],
@@ -158,51 +175,22 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         its initial dynamic stoploss.
         """
         trade_id = create_trade_id(pair, current_time)
-        direction = get_direction(side == 'sell')
+        is_short = side == 'sell'
 
-        # Get current regime
-        regime = self.regime_detector.detect_regime()
-
-        # Determine if this trade is counter-trend or aligned with trend
-        is_counter_trend = self.regime_detector.is_counter_trend(direction)
-        is_aligned_trend = self.regime_detector.is_aligned_trend(direction)
-
-        # Calculate dynamic ROI for this trade
-        roi = self.roi_calculator.get_trade_roi(direction)
-
-        # Calculate dynamic stoploss for this trade
-        stoploss = self.stoploss_calculator.calculate_dynamic_stoploss(roi, direction)
-
-        # Calculate stoploss price
-        stoploss_price = self.stoploss_calculator.calculate_stoploss_price(
-            rate, stoploss, side == 'sell'
+        # Get or create trade cache entry
+        cache_entry = self._get_or_create_trade_cache(
+            trade_id, pair, rate, current_time, is_short
         )
 
-        # Create cache entry
-        cache_entry = {
-            'direction': direction,
-            'entry_rate': rate,
-            'roi': roi,
-            'stoploss': stoploss,
-            'stoploss_price': stoploss_price,
-            'is_counter_trend': is_counter_trend,
-            'is_aligned_trend': is_aligned_trend,
-            'regime': regime,
-            'last_updated': int(current_time.timestamp())
-        }
-
-        # Store trade info in our cache
-        self.trade_cache['active_trades'][trade_id] = cache_entry
-
-        # Replace the existing log message with:
+        # Log new trade
         log_new_trade(
             pair=pair,
-            direction=direction,
-            regime=regime,
-            roi=roi,
-            stoploss=stoploss,
-            is_counter_trend=is_counter_trend,
-            is_aligned_trend=is_aligned_trend,
+            direction=cache_entry['direction'],
+            regime=cache_entry['regime'],
+            roi=cache_entry['roi'],
+            stoploss=cache_entry['stoploss'],
+            is_counter_trend=cache_entry['is_counter_trend'],
+            is_aligned_trend=cache_entry['is_aligned_trend'],
             rate=rate
         )
 
@@ -245,23 +233,19 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         return True
 
     def should_exit(self, trade: Trade, rate: float, date: datetime, **kwargs) -> List:
-        """
-        Override should_exit to use our adaptive ROI logic.
-        Let FreqTrade handle stoploss through custom_stoploss.
-        """
+        """Override should_exit to use our adaptive ROI logic."""
         # Get current profit
         current_profit = trade.calc_profit_ratio(rate)
 
-        # Get trade details from cache if possible
+        # Get trade details from cache or handle missing trade
         trade_id = create_trade_id(trade.pair, trade.open_date_utc)
-
-        # If we don't have this trade in our cache, we need to recreate its parameters
         if trade_id not in self.trade_cache['active_trades']:
-            # Call custom_stoploss to ensure cache is populated
-            _ = self.custom_stoploss(trade.pair, trade, date, rate, current_profit)
+            self._handle_missing_trade(trade, date)
 
-        # Get trade parameters from cache
-        trade_params = self.trade_cache['active_trades'][trade_id]
+        # Get or create trade cache entry
+        trade_params = self._get_or_create_trade_cache(
+            trade_id, trade.pair, trade.open_rate, trade.open_date_utc, trade.is_short
+        )
 
         # ONLY check for ROI exit - no stoploss check here
         # Check for ROI exit
@@ -291,66 +275,18 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         # Otherwise, continue holding
         return []
 
-    def custom_stoploss(self, pair: str, trade: Trade, current_time: datetime, current_rate: float,
-                        current_profit: float, **kwargs) -> float:
-        """
-        Custom stoploss logic, returning the new stoploss percentage.
-
-        For FreqTrade, stoploss values are always negative percentages (like -0.05 for 5%)
-        A "tighter" stoploss for shorts is actually closer to zero (like -0.01)
-        """
+    def custom_stoploss(self, pair: str, trade: Trade, current_time: datetime,
+                        current_rate: float, current_profit: float, **kwargs) -> float:
+        """Custom stoploss logic, returning the new stoploss percentage."""
         # Get trade ID
         trade_id = create_trade_id(pair, trade.open_date_utc)
 
-        # If not in cache, recalculate
-        if trade_id not in self.trade_cache['active_trades']:
-            direction = get_direction(trade.is_short)
+        # Get or create trade cache entry
+        cache_entry = self._get_or_create_trade_cache(
+            trade_id, pair, trade.open_rate, trade.open_date_utc, trade.is_short
+        )
 
-            # Update ROI cache if needed
-            current_timestamp = int(current_time.timestamp())
-            self.roi_calculator.update_roi_cache(current_timestamp)
-
-            # Get ROI for this trade
-            roi = self.roi_calculator.get_trade_roi(direction)
-
-            # Calculate dynamic stoploss
-            stoploss = self.stoploss_calculator.calculate_dynamic_stoploss(roi, direction)
-
-            # Get regime info
-            regime = self.regime_detector.detect_regime()
-            is_counter_trend = self.regime_detector.is_counter_trend(direction)
-            is_aligned_trend = self.regime_detector.is_aligned_trend(direction)
-
-            # Calculate stoploss price
-            stoploss_price = self.stoploss_calculator.calculate_stoploss_price(
-                trade.open_rate, stoploss, trade.is_short
-            )
-
-            # Add trade to cache
-            self.trade_cache['active_trades'][trade_id] = {
-                'direction': direction,
-                'entry_rate': trade.open_rate,
-                'roi': roi,
-                'stoploss': stoploss,
-                'stoploss_price': stoploss_price,
-                'is_counter_trend': is_counter_trend,
-                'is_aligned_trend': is_aligned_trend,
-                'regime': regime,
-                'last_updated': current_timestamp
-            }
-
-            log_trade_cache_recreated(
-                trade_id=trade_id,
-                direction=direction,
-                regime=regime,
-                roi=roi,
-                stoploss=stoploss
-            )
-
-            return stoploss
-
-        # Return the cached stoploss value
-        return self.trade_cache['active_trades'][trade_id]['stoploss']
+        return cache_entry['stoploss']
 
     def custom_stake_amount(self, pair: str, current_time: datetime, current_rate: float,
                             proposed_stake: float, min_stake: Optional[float], max_stake: float,
@@ -390,3 +326,134 @@ class MACDTrendAdaptiveStrategy(IStrategy):
                  side: str, **kwargs) -> float:
         """Return fixed leverage for all trades"""
         return 10.0
+
+    def _get_or_create_trade_cache(self, trade_id: str, pair: str, entry_rate: float,
+                                   open_date: datetime, is_short: bool) -> dict:
+        """
+        Get trade info from cache or create if not exists
+
+        Args:
+            trade_id: Unique trade identifier
+            pair: Trading pair
+            entry_rate: Entry price
+            open_date: Trade open datetime
+            is_short: Whether this is a short trade
+
+        Returns:
+            dict: Trade cache entry
+        """
+        # If trade exists in cache, return it
+        if trade_id in self.trade_cache['active_trades']:
+            return self.trade_cache['active_trades'][trade_id]
+
+        # Otherwise, create new cache entry
+        direction = get_direction(is_short)
+
+        # Update ROI cache if needed
+        current_timestamp = int(open_date.timestamp())
+        self.roi_calculator.update_roi_cache(current_timestamp)
+
+        # Get ROI for this trade
+        roi = self.roi_calculator.get_trade_roi(direction)
+
+        # Calculate dynamic stoploss
+        stoploss = self.stoploss_calculator.calculate_dynamic_stoploss(roi, direction)
+
+        # Get regime info
+        regime = self.regime_detector.detect_regime()
+        is_counter_trend = self.regime_detector.is_counter_trend(direction)
+        is_aligned_trend = self.regime_detector.is_aligned_trend(direction)
+
+        # Calculate stoploss price
+        stoploss_price = self.stoploss_calculator.calculate_stoploss_price(
+            entry_rate, stoploss, is_short
+        )
+
+        # Create cache entry
+        cache_entry = {
+            'direction': direction,
+            'entry_rate': entry_rate,
+            'roi': roi,
+            'stoploss': stoploss,
+            'stoploss_price': stoploss_price,
+            'is_counter_trend': is_counter_trend,
+            'is_aligned_trend': is_aligned_trend,
+            'regime': regime,
+            'last_updated': current_timestamp
+        }
+
+        # Store in cache
+        self.trade_cache['active_trades'][trade_id] = cache_entry
+
+        # Log cache creation/recreation
+        log_trade_cache_recreated(
+            trade_id=trade_id,
+            direction=direction,
+            regime=regime,
+            roi=roi,
+            stoploss=stoploss
+        )
+
+        return cache_entry
+
+    def _handle_missing_trade(self, trade: Trade, current_time: datetime) -> dict:
+        """
+        Handle case where a trade is not found in cache.
+        This can happen after bot restarts or when handling existing trades.
+
+        Args:
+            trade: The trade object
+            current_time: Current datetime
+
+        Returns:
+            dict: New cache entry
+        """
+        trade_id = create_trade_id(trade.pair, trade.open_date_utc)
+        direction = get_direction(trade.is_short)
+
+        logger.warning(
+            f"Trade {trade_id} not found in cache, reconstructing parameters. "
+            f"Pair: {trade.pair}, Direction: {direction}, "
+            f"Open rate: {trade.open_rate}, Open date: {trade.open_date_utc}"
+        )
+
+        # Create new cache entry
+        cache_entry = self._get_or_create_trade_cache(
+            trade_id,
+            trade.pair,
+            trade.open_rate,
+            trade.open_date_utc,
+            trade.is_short
+        )
+
+        # Log additional information about the reconstructed trade
+        logger.info(
+            f"Reconstructed trade {trade_id}: "
+            f"ROI: {cache_entry['roi']:.2%}, SL: {cache_entry['stoploss']:.2%}, "
+            f"Regime: {cache_entry['regime']}, "
+            f"{'Counter-trend' if cache_entry['is_counter_trend'] else 'Aligned' if cache_entry['is_aligned_trend'] else 'Neutral'}"
+        )
+
+        return cache_entry
+
+    def bot_start(self) -> None:
+        """
+        Called at the start of the bot to handle any initialization tasks.
+        We'll use this to recover any existing trades from FreqTrade's state.
+        """
+        # Check if we need to recover trades from FreqTrade state
+        if not self.is_backtest:
+            logger.info("Strategy starting - checking for existing trades to recover")
+            if hasattr(self, 'dp') and hasattr(self.dp, 'get_trades_for_order'):
+                # Get all currently open trades
+                trades = Trade.get_trades_proxy(is_open=True)
+
+                if trades:
+                    logger.info(f"Found {len(trades)} open trades to recover")
+                    current_time = datetime.now()
+
+                    # Recover each trade's parameters
+                    for trade in trades:
+                        self._handle_missing_trade(trade, current_time)
+                else:
+                    logger.info("No open trades found to recover")
