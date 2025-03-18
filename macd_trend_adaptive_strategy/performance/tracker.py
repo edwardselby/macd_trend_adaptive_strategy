@@ -4,6 +4,7 @@ from typing import Dict, Any
 from freqtrade.persistence import Trade
 
 from .db_handler import DBHandler
+from ..utils import log_messages
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +39,6 @@ class PerformanceTracker:
         direction = 'short' if trade.is_short else 'long'
         is_win = profit_ratio > 0
 
-        # Log trade result
-        logger.info(f"Trade exit - {direction} - {'WIN' if is_win else 'LOSS'} - {profit_ratio:.2%}")
-
         # Update stats
         if is_win:
             self.performance_tracking[direction]['wins'] += 1
@@ -59,7 +57,25 @@ class PerformanceTracker:
         # Update total profit
         self.performance_tracking[direction]['total_profit'] += profit_ratio
 
-        # Save updated tracking data
+        # Get updated stats for logging
+        total_wins = self.performance_tracking[direction]['wins']
+        total_losses = self.performance_tracking[direction]['losses']
+        win_rate = self.get_win_rate(direction)
+        recent_win_rate = self.get_recent_win_rate(direction)
+
+        # Log after all updates are complete
+        log_messages.log_performance_update(
+            pair=trade.pair,
+            direction=direction,
+            is_win=is_win,
+            profit_ratio=profit_ratio,
+            total_wins=total_wins,
+            total_losses=total_losses,
+            win_rate=win_rate,
+            recent_win_rate=recent_win_rate
+        )
+
+        # Save updated tracking data - ONLY ONCE at the end
         self.db_handler.save_performance_data(self.performance_tracking)
 
     def get_win_rate(self, direction: str) -> float:
@@ -85,14 +101,27 @@ class PerformanceTracker:
 
     def log_performance_stats(self) -> None:
         """Log current performance statistics"""
-        long_wr = self.get_recent_win_rate('long')
-        short_wr = self.get_recent_win_rate('short')
+        long_wr = self.get_win_rate('long')
+        short_wr = self.get_win_rate('short')
 
-        total_trades = (self.performance_tracking['long']['wins'] +
-                        self.performance_tracking['long']['losses'] +
-                        self.performance_tracking['short']['wins'] +
-                        self.performance_tracking['short']['losses'])
+        long_wins = self.performance_tracking['long']['wins']
+        long_losses = self.performance_tracking['long']['losses']
+        short_wins = self.performance_tracking['short']['wins']
+        short_losses = self.performance_tracking['short']['losses']
 
-        logger.info(f"Performance stats after {total_trades} trades - "
-                    f"Long: Win Rate {long_wr:.2f}, Total {self.performance_tracking['long']['wins'] + self.performance_tracking['long']['losses']} | "
-                    f"Short: Win Rate {short_wr:.2f}, Total {self.performance_tracking['short']['wins'] + self.performance_tracking['short']['losses']}")
+        total_trades = long_wins + long_losses + short_wins + short_losses
+
+        long_profit = self.performance_tracking['long']['total_profit']
+        short_profit = self.performance_tracking['short']['total_profit']
+
+        log_messages.log_performance_summary(
+            total_trades=total_trades,
+            long_wins=long_wins,
+            long_losses=long_losses,
+            long_wr=long_wr,
+            short_wins=short_wins,
+            short_losses=short_losses,
+            short_wr=short_wr,
+            long_profit=long_profit,
+            short_profit=short_profit
+        )

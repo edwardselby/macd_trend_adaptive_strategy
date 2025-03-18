@@ -2,6 +2,7 @@ import logging
 
 from ..performance import PerformanceTracker
 from ..regime import RegimeDetector
+from ..utils import log_messages
 
 logger = logging.getLogger(__name__)
 
@@ -94,17 +95,26 @@ class ROICalculator:
         """
         # Get base ROI from cache
         base_roi = self.roi_cache[direction]
-
-        # Apply factors based on trend alignment
         is_counter_trend = self.regime_detector.is_counter_trend(direction)
         is_aligned_trend = self.regime_detector.is_aligned_trend(direction)
 
+        factor = 1.0
         if is_counter_trend:
-            # Take profits more quickly on counter-trend trades
-            return base_roi * self.config.counter_trend_factor
+            factor = self.config.counter_trend_factor
+            final_roi = base_roi * factor
         elif is_aligned_trend:
-            # Let profits run longer on aligned-trend trades
-            return base_roi * self.config.aligned_trend_factor
+            factor = self.config.aligned_trend_factor
+            final_roi = base_roi * factor
         else:
-            # Neutral market regime or not enough data - use standard ROI
-            return base_roi
+            final_roi = base_roi
+
+        log_messages.log_roi_calculation(
+            direction=direction,
+            base_roi=base_roi,
+            is_counter_trend=is_counter_trend,
+            is_aligned_trend=is_aligned_trend,
+            factor=factor,
+            final_roi=final_roi
+        )
+
+        return final_roi

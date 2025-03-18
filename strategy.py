@@ -7,17 +7,24 @@ from freqtrade.enums.exittype import ExitType
 from freqtrade.persistence import Trade
 from freqtrade.strategy.interface import IStrategy, ExitCheckTuple
 
-from .config.mode_enum import StrategyMode
-from .config.strategy_config import StrategyConfig
-from .indicators.technical import calculate_indicators, populate_entry_signals
-from .performance.db_handler import DBHandler
-from .performance.tracker import PerformanceTracker
-from .regime.detector import RegimeDetector
-from .risk_management.roi_calculator import ROICalculator
-from .risk_management.stoploss_calculator import StoplossCalculator
-from .utils.helpers import create_trade_id, get_direction
+from macd_trend_adaptive_strategy.config.mode_enum import StrategyMode
+from macd_trend_adaptive_strategy.config.strategy_config import StrategyConfig
+from macd_trend_adaptive_strategy.indicators.technical import calculate_indicators, populate_entry_signals
+from macd_trend_adaptive_strategy.performance.db_handler import DBHandler
+from macd_trend_adaptive_strategy.performance.tracker import PerformanceTracker
+from macd_trend_adaptive_strategy.regime.detector import RegimeDetector
+from macd_trend_adaptive_strategy.risk_management.roi_calculator import ROICalculator
+from macd_trend_adaptive_strategy.risk_management.stoploss_calculator import StoplossCalculator
+from macd_trend_adaptive_strategy.utils import log_messages
+from macd_trend_adaptive_strategy.utils.helpers import create_trade_id, get_direction
 
+# Set up strategy-wide logging
 logger = logging.getLogger(__name__)
+
+# For detailed debug messages (only when needed)
+# logger.setLevel(logging.DEBUG)
+
+logger.setLevel(logging.INFO)
 
 
 class MACDTrendAdaptiveStrategy(IStrategy):
@@ -184,7 +191,18 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         # Store trade info in our cache
         self.trade_cache['active_trades'][trade_id] = cache_entry
 
-        logger.info(f"New {direction} trade in {regime} regime - ROI: {roi:.2%}, Stoploss: {stoploss:.2%}")
+        # Replace the existing log message with:
+        log_messages.log_new_trade(
+            pair=pair,
+            direction=direction,
+            regime=regime,
+            roi=roi,
+            stoploss=stoploss,
+            is_counter_trend=is_counter_trend,
+            is_aligned_trend=is_aligned_trend,
+            rate=rate
+        )
+
         return True
 
     def confirm_trade_exit(self, pair: str, trade: Trade, order_type: str, amount: float,
@@ -205,12 +223,21 @@ class MACDTrendAdaptiveStrategy(IStrategy):
             del self.trade_cache['active_trades'][trade_id]
 
         # Log current market regime and win rates after updating
+        direction = get_direction(trade.is_short)
+        profit_ratio = trade.calc_profit_ratio(rate)
         regime = self.regime_detector.detect_regime()
         long_wr = self.performance_tracker.get_recent_win_rate('long')
         short_wr = self.performance_tracker.get_recent_win_rate('short')
 
-        logger.info(f"Current regime: {regime} - "
-                    f"Long WR: {long_wr:.2f}, Short WR: {short_wr:.2f}")
+        log_messages.log_trade_exit(
+            pair=pair,
+            direction=direction,
+            profit_ratio=profit_ratio,
+            exit_reason=exit_reason,
+            regime=regime,
+            long_wr=long_wr,
+            short_wr=short_wr
+        )
 
         return True
 
@@ -263,8 +290,13 @@ class MACDTrendAdaptiveStrategy(IStrategy):
                 'last_updated': current_timestamp
             }
 
-            logger.info(f"Recreated trade {trade_id} in cache - "
-                        f"{direction} in {regime} regime - ROI: {roi:.2%}, Stoploss: {stoploss:.2%}")
+            log_messages.log_trade_cache_recreated(
+                trade_id=trade_id,
+                direction=direction,
+                regime=regime,
+                roi=roi,
+                stoploss=stoploss
+            )
 
         # Get trade parameters from cache
         trade_params = self.trade_cache['active_trades'][trade_id]
@@ -273,14 +305,28 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         if trade.is_short:
             # For shorts, price increasing (rate > stoploss_price) triggers stoploss
             if rate >= trade_params['stoploss_price']:
-                logger.info(f"Dynamic stoploss hit for short trade {trade_id} - "
-                            f"Current: {rate}, Stoploss at: {trade_params['stoploss_price']}")
+                log_messages.log_stoploss_hit(
+                    pair=trade.pair,
+                    direction=trade_params['direction'],
+                    current_price=rate,
+                    stoploss_price=trade_params['stoploss_price'],
+                    entry_price=trade_params['entry_rate'],
+                    profit_ratio=current_profit,
+                    regime=trade_params['regime']
+                )
                 return [ExitCheckTuple(exit_type=ExitType.STOP_LOSS, exit_reason="dynamic_stoploss")]
         else:
             # For longs, price decreasing (rate < stoploss_price) triggers stoploss
             if rate <= trade_params['stoploss_price']:
-                logger.info(f"Dynamic stoploss hit for long trade {trade_id} - "
-                            f"Current: {rate}, Stoploss at: {trade_params['stoploss_price']}")
+                log_messages.log_stoploss_hit(
+                    pair=trade.pair,
+                    direction=trade_params['direction'],
+                    current_price=rate,
+                    stoploss_price=trade_params['stoploss_price'],
+                    entry_price=trade_params['entry_rate'],
+                    profit_ratio=current_profit,
+                    regime=trade_params['regime']
+                )
                 return [ExitCheckTuple(exit_type=ExitType.STOP_LOSS, exit_reason="dynamic_stoploss")]
 
         # Check for ROI exit
@@ -289,8 +335,14 @@ class MACDTrendAdaptiveStrategy(IStrategy):
                           else "aligned" if trade_params['is_aligned_trend']
             else "neutral")
 
-            logger.info(f"Adaptive exit for {trade_params['direction']} {trade_type} trade - "
-                        f"Target: {trade_params['roi']:.2%}, Actual: {current_profit:.2%}")
+            log_messages.log_roi_exit(
+                pair=trade.pair,
+                direction=trade_params['direction'],
+                trend_type=trade_type,
+                target_roi=trade_params['roi'],
+                actual_profit=current_profit,
+                regime=trade_params['regime']
+            )
 
             return [ExitCheckTuple(exit_type=ExitType.ROI,
                                    exit_reason=f"adaptive_roi_{trade_type}_{trade_params['regime']}")]

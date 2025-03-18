@@ -2,6 +2,7 @@ import logging
 from typing import Literal
 
 from ..performance import PerformanceTracker
+from ..utils import log_messages
 
 logger = logging.getLogger(__name__)
 
@@ -43,18 +44,38 @@ class RegimeDetector:
         # Default to neutral if we don't have enough recent data
         if (long_recent_trades < self.config.min_recent_trades_per_direction or
                 short_recent_trades < self.config.min_recent_trades_per_direction):
+            log_messages.log_regime_detection(
+                long_wr=long_win_rate,
+                short_wr=short_win_rate,
+                long_trades=long_recent_trades,
+                short_trades=short_recent_trades,
+                win_rate_diff=0,
+                threshold=self.config.min_recent_trades_per_direction,
+                regime="neutral"
+            )
             return "neutral"
 
         # Calculate win rate difference
         win_rate_difference = long_win_rate - short_win_rate
 
         # Determine regime based on relative performance
+        regime = "neutral"
         if win_rate_difference > self.config.regime_win_rate_diff:
-            return "bullish"
+            regime = "bullish"
         elif win_rate_difference < -self.config.regime_win_rate_diff:
-            return "bearish"
-        else:
-            return "neutral"
+            regime = "bearish"
+
+        log_messages.log_regime_detection(
+            long_wr=long_win_rate,
+            short_wr=short_win_rate,
+            long_trades=long_recent_trades,
+            short_trades=short_recent_trades,
+            win_rate_diff=win_rate_difference,
+            threshold=self.config.regime_win_rate_diff,
+            regime=regime
+        )
+
+        return regime
 
     def is_counter_trend(self, direction: str) -> bool:
         """

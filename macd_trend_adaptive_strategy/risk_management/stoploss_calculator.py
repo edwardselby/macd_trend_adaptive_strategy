@@ -1,6 +1,7 @@
 import logging
 
 from ..regime import RegimeDetector
+from ..utils import log_messages
 
 logger = logging.getLogger(__name__)
 
@@ -36,28 +37,40 @@ class StoplossCalculator:
         # Base stoploss calculation using risk_reward_ratio
         # If ROI is 3% and risk_reward_ratio is 0.67 (1:1.5), stoploss would be -2%
         base_stoploss = -1 * roi * self.config.risk_reward_ratio
-
-        # Apply adjustment factors based on trend alignment
         is_counter_trend = self.regime_detector.is_counter_trend(direction)
         is_aligned_trend = self.regime_detector.is_aligned_trend(direction)
 
+        factor = 1.0
         if is_counter_trend:
-            # Tighter stoploss for counter-trend trades (more aggressive protection)
-            adjusted_stoploss = base_stoploss * self.config.counter_trend_stoploss_factor
+            factor = self.config.counter_trend_stoploss_factor
+            adjusted_stoploss = base_stoploss * factor
         elif is_aligned_trend:
-            # Wider stoploss for aligned-trend trades (more room to breathe)
-            adjusted_stoploss = base_stoploss * self.config.aligned_trend_stoploss_factor
+            factor = self.config.aligned_trend_stoploss_factor
+            adjusted_stoploss = base_stoploss * factor
         else:
-            # No adjustment for neutral regime
             adjusted_stoploss = base_stoploss
 
-        # Ensure stoploss is within allowed bounds
         final_stoploss = max(
-            self.config.min_stoploss,  # Don't allow stoploss smaller than min_stoploss
-            min(adjusted_stoploss, self.config.max_stoploss)  # Don't allow stoploss larger than max_stoploss
+            self.config.min_stoploss,
+            min(adjusted_stoploss, self.config.max_stoploss)
+        )
+
+        log_messages.log_stoploss_calculation(
+            direction=direction,
+            roi=roi,
+            risk_ratio=self.config.risk_reward_ratio,
+            base_sl=base_stoploss,
+            is_counter_trend=is_counter_trend,
+            is_aligned_trend=is_aligned_trend,
+            factor=factor,
+            adjusted_sl=adjusted_stoploss,
+            min_sl=self.config.min_stoploss,
+            max_sl=self.config.max_stoploss,
+            final_sl=final_stoploss
         )
 
         return final_stoploss
+
 
     def calculate_stoploss_price(self, entry_rate: float, stoploss: float, is_short: bool) -> float:
         """
@@ -72,8 +85,17 @@ class StoplossCalculator:
             float: Absolute price level for the stoploss
         """
         if is_short:
-            # For shorts, stoploss price should be ABOVE entry price
-            return entry_rate * (1 - stoploss)  # stoploss is negative, so this raises the price
+            stoploss_price = entry_rate * (1 - stoploss)
         else:
-            # For longs, stoploss price should be BELOW entry price
-            return entry_rate * (1 + stoploss)  # stoploss is negative, so this lowers the price
+            stoploss_price = entry_rate * (1 + stoploss)
+
+        direction = "short" if is_short else "long"
+
+        log_messages.log_stoploss_price(
+            direction=direction,
+            entry_price=entry_rate,
+            stoploss_pct=stoploss,
+            stoploss_price=stoploss_price
+        )
+
+        return stoploss_price

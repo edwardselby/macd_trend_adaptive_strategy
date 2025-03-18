@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from freqtrade.enums.exittype import ExitType
-from macd_trend_adaptive_strategy.strategy import MACDTrendAdaptiveStrategy
+from strategy import MACDTrendAdaptiveStrategy
 
 @pytest.fixture
 def strategy_config():
