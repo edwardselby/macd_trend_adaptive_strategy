@@ -15,14 +15,20 @@ def test_calculate_indicators(sample_dataframe, strategy_config):
     for col in expected_columns:
         assert col in df.columns, f"Expected column {col} not found in dataframe"
 
-    # Check that indicator calculations don't produce NaN values after startup period
-    # (except for the first few candles where indicators need data to initialize)
-    startup_period = strategy_config.startup_candle_count
+    # Calculate a more appropriate startup period
+    # MACD typically needs slowperiod + signalperiod + 1 (for shift)
+    min_startup = max(
+        strategy_config.slow_length + strategy_config.signal_length + 1,
+        strategy_config.adx_period + 1,  # ADX also needs a period
+        strategy_config.startup_candle_count
+    )
+
+    # Check that indicator calculations don't produce NaN values after adjusted startup period
     for col in expected_columns:
         # Skip boolean columns for NaN check
         if col not in ['uptrend', 'downtrend']:
             assert not df[col].iloc[
-                       startup_period:].isna().any(), f"Column {col} contains NaN values after startup period"
+                       min_startup:].isna().any(), f"Column {col} contains NaN values after adjusted startup period"
 
 
 def test_populate_entry_signals(sample_dataframe, strategy_config):

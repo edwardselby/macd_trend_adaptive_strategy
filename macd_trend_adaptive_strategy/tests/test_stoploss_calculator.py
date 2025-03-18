@@ -1,11 +1,33 @@
 def test_calculate_dynamic_stoploss(stoploss_calculator, regime_detector):
     """Test that dynamic stoploss is calculated correctly"""
+    # Ensure dynamic stoploss is enabled
+    stoploss_calculator.config.use_dynamic_stoploss = True
+
+    # Set a high risk_reward_ratio to generate significant stoploss values
+    stoploss_calculator.config.risk_reward_ratio = 2.0
+
+    # Set factors to ensure they're different
+    stoploss_calculator.config.counter_trend_stoploss_factor = 0.5
+    stoploss_calculator.config.aligned_trend_stoploss_factor = 1.5
+
+    # Adjust min_stoploss to be very low to avoid clamping
+    stoploss_calculator.config.min_stoploss = -0.20
+
+    # Set max_stoploss to be high to avoid upper clamping
+    stoploss_calculator.config.max_stoploss = -0.01
+
     # Test with various ROI values
     roi_values = [0.02, 0.05, 0.1]
 
     for roi in roi_values:
         # Force a bullish regime
         regime_detector.detect_regime = lambda: "bullish"
+        # Ensure the is_counter_trend and is_aligned_trend methods work as expected
+        original_is_counter_trend = regime_detector.is_counter_trend
+        original_is_aligned_trend = regime_detector.is_aligned_trend
+
+        regime_detector.is_counter_trend = lambda direction: direction == "short"
+        regime_detector.is_aligned_trend = lambda direction: direction == "long"
 
         # Get stoploss for aligned trend (long in bullish)
         long_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "long")
@@ -47,6 +69,10 @@ def test_calculate_dynamic_stoploss(stoploss_calculator, regime_detector):
 
         assert abs(long_sl - expected_long_sl) < 0.0001
         assert abs(short_sl - expected_short_sl) < 0.0001
+
+        # Restore original methods
+        regime_detector.is_counter_trend = original_is_counter_trend
+        regime_detector.is_aligned_trend = original_is_aligned_trend
 
 
 def test_calculate_stoploss_price(stoploss_calculator):

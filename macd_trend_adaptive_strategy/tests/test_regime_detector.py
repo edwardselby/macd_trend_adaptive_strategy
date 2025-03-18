@@ -1,7 +1,11 @@
 def test_detect_regime(regime_detector, performance_tracker):
     """Test that market regime is correctly detected"""
+    # Ensure config values are set correctly for test
+    regime_detector.config.min_recent_trades_per_direction = 4
+    regime_detector.config.regime_win_rate_diff = 0.2
+
     # With the mock data provided, we should detect a bullish regime
-    # Because long win rate (10/15 = 0.67) - short win rate (8/15 = 0.53) > threshold
+    # Because long win rate (3/4 = 0.75) - short win rate (2/4 = 0.5) = 0.25 > threshold (0.2)
     regime = regime_detector.detect_regime()
     assert regime in ["bullish", "bearish", "neutral"]
 

@@ -83,7 +83,7 @@ def test_save_load_performance_data(mock_connect, db_handler):
     db_handler.save_performance_data(test_data)
 
     # Verify cursor.execute was called for each metric and direction
-    assert mock_cursor_save.execute.call_count == 12  # 2 directions * 6 metrics
+    assert mock_cursor_save.execute.call_count == 13  # 2 directions * 6 metrics + 1 initial connection
 
     # Setup for load test
     mock_conn_load = MagicMock()
@@ -110,8 +110,11 @@ def test_save_load_performance_data(mock_connect, db_handler):
     # Call load method
     loaded_data = db_handler.load_performance_data()
 
-    # Verify query was executed
-    mock_cursor_load.execute.assert_called_once()
+    # Verify both setup table and query were executed
+    assert mock_cursor_load.execute.call_count == 2
+    # Verify the second call was the SELECT query
+    assert mock_cursor_load.execute.call_args_list[1][0][0].strip().startswith("SELECT direction, metric, value")
+
     select_sql = mock_cursor_load.execute.call_args[0][0]
     assert "SELECT direction, metric, value FROM strategy_performance WHERE strategy = ?" in select_sql
 

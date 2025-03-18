@@ -84,7 +84,7 @@ def mock_db_handler():
 @pytest.fixture
 def performance_tracker(mock_db_handler):
     """Create a performance tracker with mock data"""
-    from performance.tracker import PerformanceTracker
+    from macd_trend_adaptive_strategy.performance.tracker import PerformanceTracker
 
     tracker = PerformanceTracker(mock_db_handler, max_recent_trades=10)
     return tracker
@@ -93,7 +93,7 @@ def performance_tracker(mock_db_handler):
 @pytest.fixture
 def regime_detector(performance_tracker, strategy_config):
     """Create a regime detector with mock data"""
-    from regime.detector import RegimeDetector
+    from macd_trend_adaptive_strategy.regime.detector import RegimeDetector
 
     detector = RegimeDetector(performance_tracker, strategy_config)
     return detector
@@ -102,7 +102,7 @@ def regime_detector(performance_tracker, strategy_config):
 @pytest.fixture
 def roi_calculator(performance_tracker, regime_detector, strategy_config):
     """Create an ROI calculator with mock data"""
-    from risk_management.roi_calculator import ROICalculator
+    from macd_trend_adaptive_strategy.risk_management.roi_calculator import ROICalculator
 
     calculator = ROICalculator(performance_tracker, regime_detector, strategy_config)
     return calculator
@@ -111,7 +111,7 @@ def roi_calculator(performance_tracker, regime_detector, strategy_config):
 @pytest.fixture
 def stoploss_calculator(regime_detector, strategy_config):
     """Create a stoploss calculator with mock data"""
-    from risk_management.stoploss_calculator import StoplossCalculator
+    from macd_trend_adaptive_strategy.risk_management.stoploss_calculator import StoplossCalculator
 
     calculator = StoplossCalculator(regime_detector, strategy_config)
     return calculator
