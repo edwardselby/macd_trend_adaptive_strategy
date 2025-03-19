@@ -1,0 +1,255 @@
+# MACD Trend Adaptive Strategy
+
+A sophisticated trading strategy for FreqTrade with dynamic risk management, adaptive ROI, and market regime detection.
+
+## Overview
+
+This MACD Trend Adaptive Strategy is built for FreqTrade and includes several advanced features:
+
+- **Market Regime Detection**: Automatically identifies bullish, bearish, or neutral market conditions
+- **Adaptive ROI**: Dynamically adjusts take-profit targets based on recent performance
+- **Dynamic Stoploss**: Risk-reward based stoploss that adapts to market conditions
+- **Trend Detection**: Combines MACD crossovers with trend detection for higher-quality signals
+- **Performance Tracking**: Monitors and analyzes win rates to optimize future trades
+
+The strategy uses the MACD indicator for entry signals, but enhances it with trend filters, market regime detection, and adaptive risk management to improve overall performance.
+
+## Installation
+
+### Prerequisites
+
+- FreqTrade 2025.2 or higher
+- Python 3.10+
+- TA-Lib
+- Recommended: Poetry for dependency management
+
+### Setup
+
+1. Clone this repository into your FreqTrade `user_data/strategies` folder:
+
+```bash
+cd user_data/strategies
+git clone https://github.com/yourusername/macd_trend_adaptive_strategy.git
+```
+
+2. Install dependencies:
+
+```bash
+# If using Poetry
+cd macd_trend_adaptive_strategy
+poetry install
+
+# If using pip
+pip install -r requirements.txt
+```
+
+## Configuration
+
+The strategy can be configured via the `strategy_config.json` file. Different parameter sets are provided for various timeframes (1m, 5m, 15m, 30m, 1h).
+
+### Basic Configuration
+
+To use the strategy with FreqTrade, add it to your configuration:
+
+```json
+"strategy": "macd_trend_adaptive_strategy",
+"strategy_path": "user_data/strategies/macd_trend_adaptive_strategy",
+```
+
+### Timeframe Selection
+
+You can choose which timeframe parameters to use by modifying the `STRATEGY_MODE` in the strategy.py file:
+
+```python
+# Change this to select a different parameter set
+STRATEGY_MODE = StrategyMode.TIMEFRAME_5M  # Options: TIMEFRAME_1M, TIMEFRAME_5M, TIMEFRAME_15M, TIMEFRAME_30M, TIMEFRAME_1H
+```
+
+### Configuration Parameters
+
+The strategy configuration includes the following parameter categories:
+
+#### Core Parameters
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `risk_reward_ratio` | Ratio of risk to reward for stoploss calculation (as "1:X" string) | "1:2.5" |
+| `min_roi` | Minimum target ROI (used in dynamic ROI calculation) | 0.028 |
+| `max_roi` | Maximum target ROI (used in dynamic ROI calculation) | 0.06 |
+| `default_roi` | Fallback ROI value when adaptive calculation fails | 0.07 |
+| `static_stoploss` | Fallback stoploss value when dynamic calculation fails | -0.055 |
+| `min_stoploss` | Minimum (closest to zero) stoploss value | -0.02 |
+| `max_stoploss` | Maximum (furthest from zero) stoploss value | -0.045 |
+
+#### MACD Parameters
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `fast_length` | Fast EMA period for MACD calculation | 12 |
+| `slow_length` | Slow EMA period for MACD calculation | 26 |
+| `signal_length` | Signal line period for MACD calculation | 9 |
+
+#### Trend Detection Parameters
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `adx_period` | Period for ADX indicator calculation | 14 |
+| `adx_threshold` | Minimum ADX value to consider a strong trend | 22 |
+| `ema_fast` | Fast EMA period for trend detection | 8 |
+| `ema_slow` | Slow EMA period for trend detection | 21 |
+
+#### Risk Management Parameters
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `counter_trend_factor` | Factor applied to ROI for counter-trend trades (lower = take profits sooner) | 0.6 |
+| `aligned_trend_factor` | Factor applied to ROI for trend-aligned trades | 1.2 |
+| `counter_trend_stoploss_factor` | Factor applied to stoploss for counter-trend trades (lower = tighter stoploss) | 0.6 |
+| `aligned_trend_stoploss_factor` | Factor applied to stoploss for trend-aligned trades | 1.2 |
+| `use_dynamic_stoploss` | Enable/disable dynamic stoploss calculation | true |
+| `long_roi_boost` | Additional ROI percentage to add to long trades | 0.008 |
+
+#### Market Regime Parameters
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `min_win_rate` | Minimum win rate for ROI normalization | 0.2 |
+| `max_win_rate` | Maximum win rate for ROI normalization | 0.8 |
+| `regime_win_rate_diff` | Minimum win rate difference to determine market regime | 0.25 |
+| `min_recent_trades_per_direction` | Minimum number of trades required to detect market regime | 5 |
+| `max_recent_trades` | Maximum number of recent trades to track for performance metrics | 10 |
+
+#### Other Parameters
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `startup_candle_count` | Number of warmup candles required | 30 |
+| `roi_cache_update_interval` | Seconds between ROI cache updates | 60 |
+
+### Parameter Explanation and Optimization
+
+#### Understanding Risk-Reward Ratio
+
+The `risk_reward_ratio` parameter (e.g., "1:2.5") determines the relationship between your ROI target and stoploss. A ratio of 1:2.5 means that for every 1% you risk, you aim to gain 2.5%. This parameter directly affects stoploss calculation.
+
+Example: With ROI = 4% and a risk-reward ratio of 1:2 (0.5), the stoploss would be -2%.
+
+#### MACD Parameter Selection
+
+- **Fast/Slow Lengths**: These determine the sensitivity of the MACD indicator. Shorter periods are more sensitive (more signals but more noise), while longer periods are smoother (fewer signals but clearer trends).
+- **Signal Length**: Determines how responsive the signal line is to MACD line movements.
+
+#### Counter-Trend vs. Aligned-Trend Factors
+
+- **counter_trend_factor**: Reduces ROI target for trades that go against the detected market regime (e.g., short trades in a bullish market). Lower values (0.3-0.6) take profits sooner.
+- **aligned_trend_factor**: Multiplier for ROI target when trading with the market regime. Values above 1.0 allow for larger profit targets.
+- **counter_trend_stoploss_factor**: Adjusts stoploss to be tighter for counter-trend trades. Lower values create tighter stoplosses.
+- **aligned_trend_stoploss_factor**: Adjusts stoploss for trend-aligned trades. Higher values allow for looser stoplosses.
+
+#### Win Rate Adaptation
+
+- **min_win_rate/max_win_rate**: Define the range for normalizing win rates.
+- **regime_win_rate_diff**: How much better long trades must perform vs. short trades (or vice versa) to determine market regime. Higher values make regime changes less frequent.
+
+#### Optimization Tips
+
+1. **Timeframe**: Start with the 5m or 15m configuration, as these tend to be more stable.
+2. **Risk-Reward**: Adjust based on the volatility of your trading pairs:
+   - Lower risk-reward ratios (e.g., 1:1.5) for high volatility
+   - Higher risk-reward ratios (e.g., 1:3) for lower volatility
+3. **Trend Detection**: For faster-moving markets, reduce `adx_period` and `adx_threshold`
+4. **Counter-Trend Factors**: Risk-averse strategies should use lower values (0.3-0.5) to exit counter-trend trades quickly
+
+## Strategy Logic
+
+### Entry Signals
+
+The strategy enters trades on MACD crossovers with trend confirmation:
+
+- **Long Entry**: MACD crosses above signal line AND uptrend is detected
+- **Short Entry**: MACD crosses below signal line AND downtrend is detected
+
+### Exit Logic
+
+Trades exit based on:
+
+1. **Dynamic ROI**: Target profit based on win rate, adjusted for trend alignment
+2. **Adaptive Stoploss**: Loss limit based on ROI target and risk-reward ratio
+3. **Backstop Values**: Failsafe stoploss and ROI values
+
+### Market Regime Detection
+
+The strategy detects market regimes by comparing win rates:
+
+- **Bullish Regime**: Long trades significantly outperform short trades
+- **Bearish Regime**: Short trades significantly outperform long trades
+- **Neutral Regime**: No significant performance difference
+
+The `regime_win_rate_diff` parameter determines how large the performance gap must be to declare a non-neutral regime.
+
+## Testing and Optimization
+
+### Backtesting
+
+Run backtesting with FreqTrade:
+
+```bash
+freqtrade backtesting --strategy MACDTrendAdaptiveStrategy --timerange 20230101-20231231
+```
+
+### Hyperoptimization
+
+The strategy is designed to work with FreqTrade's hyperopt functionality. Suggested hyperopt spaces:
+
+```json
+"spaces": ["buy", "roi", "stoploss"],
+```
+
+Key parameters to optimize:
+
+- `fast_length`, `slow_length`, `signal_length`
+- `adx_threshold`
+- `risk_reward_ratio`
+- `min_roi` and `max_roi`
+
+## Performance Tracking
+
+The strategy includes a sophisticated performance tracking system that:
+
+1. Monitors win rates for both long and short trades
+2. Detects changes in market regime
+3. Adapts ROI and stoploss dynamically based on performance
+
+Performance data is saved to the FreqTrade database for persistence between bot restarts.
+
+## Common Issues and Solutions
+
+### Issue: Strategy not taking trades
+- Check that `startup_candle_count` is sufficient for calculating all indicators
+- Verify that the MACD parameters are appropriate for your timeframe
+
+### Issue: Too many trades (overtrading)
+- Increase `adx_threshold` to require stronger trends
+- Increase the gap between `fast_length` and `slow_length`
+
+### Issue: Trades stop too early (ROI too low)
+- Increase `min_roi` and `max_roi`
+- Increase `aligned_trend_factor` to allow trend-following trades to run longer
+
+### Issue: Frequent stoploss hits
+- Adjust `risk_reward_ratio` to allow wider stoplosses
+- Increase `counter_trend_stoploss_factor` to give counter-trend trades more room
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+
+## Disclaimer
+
+Trading cryptocurrencies involves significant risk and can result in loss of funds. This strategy is provided as-is with no guarantees of profitability. Always test thoroughly before using with real funds.
