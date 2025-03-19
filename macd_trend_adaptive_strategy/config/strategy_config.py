@@ -342,9 +342,15 @@ class StrategyConfig:
         # Store risk_reward_ratio as float in the traditional attribute name for compatibility
         self.risk_reward_ratio = self.risk_reward_ratio_float
 
+        # For backward compatibility with existing code
+        # Make static_stoploss more negative than max_stoploss (20% more negative)
+        self.static_stoploss = self.max_stoploss * 1.2
+
+        # Make default_roi higher than max_roi (20% higher)
+        self.default_roi = self.max_roi * 1.2
+
         # Set default values for parameters not in the config file
         self._set_default_values()
-
 
     def _set_default_values(self) -> None:
         """Set default values for parameters not in the configuration file"""

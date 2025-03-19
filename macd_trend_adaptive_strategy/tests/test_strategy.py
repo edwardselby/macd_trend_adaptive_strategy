@@ -149,7 +149,7 @@ def test_should_exit_roi_hit(strategy, mock_trade):
 
 
 def test_should_exit_default_roi(strategy, mock_trade):
-    """Test should_exit method when default ROI is hit"""
+    """Test should_exit method when default ROI backstop is hit"""
     # Setup
     mock_trade.pair = "BTC/USDT"
     mock_trade.open_rate = 20000
@@ -157,18 +157,18 @@ def test_should_exit_default_roi(strategy, mock_trade):
     mock_trade.is_short = False
     mock_trade.leverage = 1.0  # Set leverage for testing
 
-    # Make sure default ROI exit is enabled - MANUALLY ENABLE FOR THIS TEST
-    strategy.strategy_config.use_default_roi_exit = True
+    # Store original default_roi
+    original_default_roi = strategy.strategy_config.default_roi
 
-    # Set the default ROI to a value below the adaptive ROI
-    strategy.strategy_config.default_roi = 0.04
+    # Set the default ROI to a value that we can easily test
+    strategy.strategy_config.default_roi = strategy.strategy_config.max_roi * 1.1  # 110% of max_roi
 
-    # Add trade to cache
+    # Add trade to cache with a higher ROI target than default_roi
     trade_id = f"{mock_trade.pair}_{mock_trade.open_date_utc.timestamp()}"
     strategy.trade_cache['active_trades'][trade_id] = {
         'direction': 'long',
         'entry_rate': mock_trade.open_rate,
-        'roi': 0.05,  # Adaptive ROI at 5%
+        'roi': strategy.strategy_config.max_roi * 1.5,  # 150% of max_roi - higher than default_roi
         'stoploss': -0.03,
         'stoploss_price': 19400,
         'is_counter_trend': False,
@@ -177,29 +177,39 @@ def test_should_exit_default_roi(strategy, mock_trade):
         'last_updated': int(datetime.now().timestamp())
     }
 
-    # Configure profit calculation to be above default ROI but below adaptive ROI
+    # Configure profit calculation to be exactly at default_roi
     def calc_profit_ratio(rate):
         if rate == 20800:
-            return 0.04  # Exactly at default ROI
+            return strategy.strategy_config.default_roi
         else:
             return (rate - mock_trade.open_rate) / mock_trade.open_rate
 
     mock_trade.calc_profit_ratio = calc_profit_ratio
 
-    # Test with price at default ROI target
-    exit_signals = strategy.should_exit(mock_trade, 20800, datetime.now())
+    try:
+        # Test with price at default ROI target
+        exit_signals = strategy.should_exit(mock_trade, 20800, datetime.now())
 
-    # Should exit with default_roi reason
-    assert len(exit_signals) == 1
-    assert exit_signals[0].exit_type == ExitType.ROI
-    assert exit_signals[0].exit_reason == "default_roi"
+        # Should exit with default_roi reason
+        assert len(exit_signals) == 1
+        assert exit_signals[0].exit_type == ExitType.ROI
+        assert exit_signals[0].exit_reason == "default_roi"
 
-    # Now test with default ROI exit disabled
-    strategy.strategy_config.use_default_roi_exit = False
-    exit_signals = strategy.should_exit(mock_trade, 20800, datetime.now())
+        # Test with price below default_roi
+        # Mock a profit that's slightly below default_roi
+        def calc_profit_ratio_below(rate):
+            return strategy.strategy_config.default_roi * 0.9
 
-    # Should not exit
-    assert len(exit_signals) == 0
+        mock_trade.calc_profit_ratio = calc_profit_ratio_below
+
+        # Should not exit since we're below the default_roi
+        exit_signals = strategy.should_exit(mock_trade, 20700, datetime.now())
+        assert len(exit_signals) == 0
+
+    finally:
+        # Restore original default_roi value
+        strategy.strategy_config.default_roi = original_default_roi
+
 
 def test_should_exit_stoploss_hit(strategy, mock_trade):
     """Test should_exit method when stoploss is hit"""

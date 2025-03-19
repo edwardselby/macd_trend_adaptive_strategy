@@ -132,11 +132,11 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         # Simplified trade cache initialization
         self.trade_cache = {'active_trades': {}}
 
-        # set the stoploss below the minimum as a backstop
-        self.stoploss = (self.strategy_config.min_stoploss - self.strategy_config.max_stoploss)
+        # Use the already calculated static_stoploss as the strategy stoploss
+        self.stoploss = self.strategy_config.static_stoploss
 
-        # set the minimal roi above the maximum as a backstop
-        self.minimal_roi = {0: (self.strategy_config.min_roi + self.strategy_config.max_roi)}
+        # Use the already calculated default_roi as the minimal_roi
+        self.minimal_roi = {0: self.strategy_config.default_roi}
 
         # Logging initialization details
         log_strategy_initialization(
@@ -226,7 +226,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
     def should_exit(self, trade: Trade, rate: float, date: datetime, **kwargs) -> List:
         """
         Combined logic for both ROI (take profit) and stoploss.
-        This replaces both the old should_exit and custom_stoploss methods.
+        This includes both dynamic values and backstop values for safety.
         """
         # Get current profit
         current_profit = trade.calc_profit_ratio(rate)
@@ -251,7 +251,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
 
         adjusted_profit = float(current_profit) / leverage
 
-        # Check for stoploss hit
+        # Check for stoploss hit - either dynamic stoploss or static backstop stoploss
         if (not trade.is_short and rate <= trade_params['stoploss_price']) or \
                 (trade.is_short and rate >= trade_params['stoploss_price']):
             direction = trade_params['direction']
@@ -269,7 +269,33 @@ class MACDTrendAdaptiveStrategy(IStrategy):
             return [ExitCheckTuple(exit_type=ExitType.STOP_LOSS,
                                    exit_reason=f"stoploss_{direction}_{trade_params['regime']}")]
 
-        # Check for adaptive ROI exit (take profit)
+        # Calculate global static stoploss price for additional safety
+        static_stoploss_price = self.stoploss_calculator.calculate_stoploss_price(
+            trade.open_rate, self.strategy_config.static_stoploss, trade.is_short)
+
+        # Check if price hit the static stoploss backstop
+        if ((not trade.is_short and rate <= static_stoploss_price) or
+                (trade.is_short and rate >= static_stoploss_price)):
+            direction = get_direction(trade.is_short)
+
+            log_stoploss_hit(
+                pair=trade.pair,
+                direction=direction,
+                current_price=rate,
+                stoploss_price=static_stoploss_price,
+                entry_price=trade.open_rate,
+                profit_ratio=current_profit,
+                regime="backstop"
+            )
+
+            return [ExitCheckTuple(exit_type=ExitType.STOP_LOSS,
+                                   exit_reason=f"static_stoploss_backstop")]
+
+        # Check if profit reached the default_roi backstop (highest priority ROI)
+        if adjusted_profit >= self.strategy_config.default_roi:
+            return [ExitCheckTuple(exit_type=ExitType.ROI, exit_reason="default_roi")]
+
+        # Check for adaptive ROI exit (take profit) - lower priority than default_roi
         if adjusted_profit >= trade_params['roi']:
             trade_type = ("countertrend" if trade_params['is_counter_trend']
                           else "aligned" if trade_params['is_aligned_trend']
@@ -426,12 +452,16 @@ class MACDTrendAdaptiveStrategy(IStrategy):
                 logger.error(
                     f"Cannot recreate trade parameters - trade object missing attributes: {missing_attrs}"
                 )
+                # Use the already calculated backstop values
+                fallback_roi = self.strategy_config.default_roi
+                fallback_stoploss = self.strategy_config.static_stoploss
+
                 # Return empty cache with basic info to prevent further errors
                 return {
                     'direction': 'unknown',
                     'entry_rate': 0,
-                    'roi': self.strategy_config.default_roi,
-                    'stoploss': self.strategy_config.static_stoploss,
+                    'roi': fallback_roi,
+                    'stoploss': fallback_stoploss,
                     'stoploss_price': 0,
                     'is_counter_trend': False,
                     'is_aligned_trend': False,
@@ -463,14 +493,19 @@ class MACDTrendAdaptiveStrategy(IStrategy):
 
             except Exception as e:
                 logger.error(f"Error creating cache entry for trade {trade_id}: {e}")
+
+                # Use the already calculated backstop values
+                fallback_roi = self.strategy_config.default_roi
+                fallback_stoploss = self.strategy_config.static_stoploss
+
                 # Create a fallback entry with conservative values
                 fallback_entry = {
                     'direction': direction,
                     'entry_rate': trade.open_rate,
-                    'roi': self.strategy_config.default_roi,
-                    'stoploss': self.strategy_config.static_stoploss,
+                    'roi': fallback_roi,
+                    'stoploss': fallback_stoploss,
                     'stoploss_price': self.stoploss_calculator.calculate_fallback_stoploss_price(
-                        trade.open_rate, self.strategy_config.static_stoploss, trade.is_short
+                        trade.open_rate, fallback_stoploss, trade.is_short
                     ),
                     'is_counter_trend': False,
                     'is_aligned_trend': False,
@@ -487,12 +522,17 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         except Exception as outer_e:
             # Handle any unexpected errors in the overall process
             logger.error(f"Unexpected error handling missing trade: {outer_e}")
+
+            # Use the already calculated backstop values
+            fallback_roi = self.strategy_config.default_roi
+            fallback_stoploss = self.strategy_config.static_stoploss
+
             # Return minimal safe values
             return {
                 'direction': 'unknown',
                 'entry_rate': 0,
-                'roi': self.strategy_config.default_roi,
-                'stoploss': self.strategy_config.static_stoploss,
+                'roi': fallback_roi,
+                'stoploss': fallback_stoploss,
                 'stoploss_price': 0,
                 'is_counter_trend': False,
                 'is_aligned_trend': False,

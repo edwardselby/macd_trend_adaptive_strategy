@@ -11,7 +11,40 @@ from macd_trend_adaptive_strategy.config import StrategyConfig, StrategyMode
 @pytest.fixture
 def strategy_config():
     """Return a strategy configuration object with test settings"""
-    return StrategyConfig(StrategyMode.DEFAULT)
+    # Use the new StrategyConfig class with the default mode
+    config = StrategyConfig(StrategyMode.DEFAULT)
+
+    # Make sure risk_reward_ratio is properly set to float
+    if not isinstance(config.risk_reward_ratio, float):
+        # Parse the R:R ratio to float if it's still a string
+        try:
+            risk, reward = config.risk_reward_ratio_str.split(':')
+            config.risk_reward_ratio = float(risk.strip()) / float(reward.strip())
+        except:
+            # Fallback
+            config.risk_reward_ratio = 0.5  # Default 1:2 ratio
+
+    # Ensure base_roi is calculated
+    if not hasattr(config, 'base_roi'):
+        config.base_roi = (config.min_roi + config.max_roi) / 2
+
+    # Ensure backstop values are properly set
+    # Make static_stoploss more negative than max_stoploss (20% more negative)
+    if not hasattr(config, 'static_stoploss'):
+        config.static_stoploss = config.max_stoploss * 1.2
+
+    # Make default_roi higher than max_roi (20% higher)
+    if not hasattr(config, 'default_roi'):
+        config.default_roi = config.max_roi * 1.2
+
+    # Ensure other important properties are set
+    if not hasattr(config, 'use_dynamic_stoploss'):
+        config.use_dynamic_stoploss = True
+
+    if not hasattr(config, 'use_default_roi_exit'):
+        config.use_default_roi_exit = False
+
+    return config
 
 
 @pytest.fixture

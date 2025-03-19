@@ -31,8 +31,14 @@ class StoplossCalculator:
         Returns:
             float: The calculated stoploss value (negative number representing percentage)
         """
-        if not self.config.use_dynamic_stoploss:
-            return self.config.static_stoploss
+        # Check if use_dynamic_stoploss is set and is False
+        if hasattr(self.config, 'use_dynamic_stoploss') and not self.config.use_dynamic_stoploss:
+            # Use static_stoploss if available, otherwise calculate a backstop stoploss
+            if hasattr(self.config, 'static_stoploss'):
+                return self.config.static_stoploss
+            else:
+                # Calculate a fallback stoploss that's more negative than max_stoploss
+                return self.config.max_stoploss * 1.2
 
         # Base stoploss calculation using risk_reward_ratio
         # If ROI is 3% and risk_reward_ratio is 0.67 (1:1.5), stoploss would be -2%
@@ -143,10 +149,13 @@ class StoplossCalculator:
         except Exception as e:
             logger.error(f"Error calculating fallback stoploss price: {e}")
 
-            # Conservative fallback using the same factors as in calculate_stoploss_price
+            # Use static_stoploss if available, otherwise use max_stoploss * 1.2
+            # This ensures the fallback is always a backstop value
+            fallback_stoploss = getattr(self.config, 'static_stoploss', self.config.max_stoploss * 1.2)
+
             if is_short:
-                # 10% above entry for shorts
-                return entry_rate * (1 + abs(self.config.min_stoploss))
+                # For shorts, calculate a price above entry using the fallback stoploss
+                return entry_rate * (1 - fallback_stoploss)
             else:
-                # 10% below entry for longs
-                return entry_rate * (1 - abs(self.config.min_stoploss))
+                # For longs, calculate a price below entry using the fallback stoploss
+                return entry_rate * (1 + fallback_stoploss)

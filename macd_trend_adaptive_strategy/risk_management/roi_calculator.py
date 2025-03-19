@@ -23,10 +23,13 @@ class ROICalculator:
         self.regime_detector = regime_detector
         self.config = config
 
+        # Get default ROI from config or calculate a fallback value
+        default_roi = getattr(self.config, 'default_roi', self.config.max_roi * 1.2)
+
         # Cache for ROI values to reduce recalculation frequency
         self.roi_cache = {
-            'long': self.config.default_roi,
-            'short': self.config.default_roi,
+            'long': default_roi,
+            'short': default_roi,
             'last_updated': 0
         }
 
