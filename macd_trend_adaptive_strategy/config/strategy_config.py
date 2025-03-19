@@ -4,6 +4,8 @@ import os
 from enum import Enum
 from typing import Dict, Any
 
+from macd_trend_adaptive_strategy.config.config_validator import ConfigValidator
+
 logger = logging.getLogger(__name__)
 
 
@@ -176,14 +178,6 @@ class StrategyConfig:
     }
 
     def __init__(self, mode: StrategyMode = StrategyMode.DEFAULT, config_path: str = None):
-        """
-        Initialize strategy configuration by loading timeframe-specific settings and
-        any user-provided overrides.
-
-        Args:
-            mode: Strategy mode (determines the timeframe)
-            config_path: Path to optional JSON configuration file with overrides
-        """
         # Determine the timeframe based on selected mode
         self.timeframe = self._get_timeframe_from_mode(mode)
 
@@ -193,6 +187,15 @@ class StrategyConfig:
         # Override with user config if provided
         if config_path:
             self._load_user_config(config_path)
+
+        # Validate and fix configuration
+        errors, fixes = ConfigValidator.validate_and_fix(self)
+
+        if errors:
+            logger.warning(f"Configuration validation errors: {errors}")
+
+        if fixes:
+            logger.info(f"Configuration fixes applied: {fixes}")
 
         # Parse risk:reward ratio and calculate derived parameters
         self._parse_risk_reward_ratio()
@@ -371,15 +374,20 @@ class StrategyConfig:
             self.max_recent_trades = 10
 
         # Other settings
-        if not hasattr(self, 'default_roi'):
-            self.default_roi = 0.04
         if not hasattr(self, 'long_roi_boost'):
             self.long_roi_boost = 0.0
-        # we disable this otherwise it will set a static take profit limit for all trades
-        if not hasattr(self, 'use_default_roi_exit'):
-            self.use_default_roi_exit = False
         if not hasattr(self, 'use_dynamic_stoploss'):
             self.use_dynamic_stoploss = True
+
+        # Default exits
+        if not hasattr(self, 'use_default_roi_exit'):
+            self.use_default_roi_exit = False
+        if not hasattr(self, 'use_default_stoploss_exit'):
+            self.use_default_stoploss_exit = False
+        if not hasattr(self, 'default_roi'):
+            self.default_roi = 0.04
+        if not hasattr(self, 'default_stoploss'):
+            self.default_stoploss = -0.04
 
 
     def get_config_summary(self) -> str:

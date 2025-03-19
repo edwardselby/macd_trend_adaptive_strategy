@@ -81,79 +81,61 @@ class MACDTrendAdaptiveStrategy(IStrategy):
     def __init__(self, config: dict) -> None:
         """
         Initialize the strategy with all required components
-
-        Args:
-            config: FreqTrade configuration
         """
         super().__init__(config)
 
-        # Path to the strategy configuration file
-        config_path = "user_data/strategy_config.json"
+        # Use the strategy mode to load configuration
+        config_path = "config/strategy_config.json"
+        self.strategy_config = StrategyConfig(
+            self.STRATEGY_MODE,
+            config_path if os.path.exists(config_path) else None
+        )
 
-        # Check if the config file exists, otherwise don't pass it
-        if os.path.exists(config_path):
-            # Initialize strategy configuration with selected mode and configuration file
-            self.strategy_config = StrategyConfig(self.STRATEGY_MODE, config_path)
-        else:
-            # Use default configuration without file
-            self.strategy_config = StrategyConfig(self.STRATEGY_MODE)
-
-        # Set a realistic stoploss value (still used as the initial/base stoploss)
-        self.stoploss = self.strategy_config.static_stoploss
-
-        # Apply startup candle count setting
+        # Simplify attribute setting
         self.startup_candle_count = self.strategy_config.startup_candle_count
-
-        # Initialize timeframe
         self.timeframe = self.strategy_config.timeframe
 
-        # Set up database handler
+        # Simplified database and performance tracking
         self.db_handler = DBHandler(config)
         self.db_handler.set_strategy_name(self.__class__.__name__)
 
-        # Check if we're in backtest mode
         self.is_backtest = (
                 config.get('runmode') in ('backtest', 'hyperopt') or
-                config.get('backtest', False) or  # This parameter exists in backtest config
-                'timerange' in config or  # Timerange is set for backtests
-                'export' in config  # Export is typically set for backtests
+                config.get('backtest', False) or
+                'timerange' in config or
+                'export' in config
         )
 
-        # Clear performance data at the start of each backtest
         if self.is_backtest:
             self.db_handler.clear_performance_data()
 
-        # Initialize performance tracker AFTER clearing data
+        # Use dependency injection for easier testing and configuration
         self.performance_tracker = PerformanceTracker(
             self.db_handler,
             max_recent_trades=self.strategy_config.max_recent_trades
         )
 
-        # Initialize regime detector
+        # Components initialized with config object
         self.regime_detector = RegimeDetector(
             self.performance_tracker,
             self.strategy_config
         )
 
-        # Initialize ROI calculator
         self.roi_calculator = ROICalculator(
             self.performance_tracker,
             self.regime_detector,
             self.strategy_config
         )
 
-        # Initialize stoploss calculator
         self.stoploss_calculator = StoplossCalculator(
             self.regime_detector,
             self.strategy_config
         )
 
-        # Initialize trade cache for active trades
-        self.trade_cache = {
-            'active_trades': {}
-        }
+        # Simplified trade cache initialization
+        self.trade_cache = {'active_trades': {}}
 
-        # Log strategy initialization details
+        # Logging initialization details
         log_strategy_initialization(
             mode=self.STRATEGY_MODE,
             timeframe=self.timeframe,
@@ -171,9 +153,6 @@ class MACDTrendAdaptiveStrategy(IStrategy):
                 'max': self.strategy_config.max_stoploss
             }
         )
-
-        # Override freqtrade's stoploss setting with our derived value
-        self.stoploss = self.strategy_config.static_stoploss
 
     def confirm_trade_entry(self, pair: str, order_type: str, amount: float, rate: float,
                             time_in_force: str, current_time: datetime, entry_tag: Optional[str],
@@ -259,19 +238,31 @@ class MACDTrendAdaptiveStrategy(IStrategy):
             trade_id, trade.pair, trade.open_rate, trade.open_date_utc, trade.is_short
         )
 
-        # Check for stoploss hit - using price-based comparison instead of profit ratio
+        # De-leverage for correct comparison with profit targets
+        try:
+            leverage = float(trade.leverage)
+            if leverage <= 0:  # Safeguard against invalid leverage values
+                leverage = 1.0
+        except (TypeError, ValueError, AttributeError):
+            leverage = 1.0
+
+        adjusted_profit = float(current_profit) / leverage
+
+        # Check for default stoploss exit if enabled
+        if (self.strategy_config.use_default_stoploss_exit and
+                adjusted_profit <= self.strategy_config.default_stoploss):
+            logger.debug(
+                f"Default Stoploss exit: {trade.pair}, "
+                f"profit={adjusted_profit:.2%}, "
+                f"default_stoploss={self.strategy_config.default_stoploss:.2%}"
+            )
+            return [ExitCheckTuple(exit_type=ExitType.STOP_LOSS, exit_reason="default_stoploss")]
+
+        # Check for stoploss hit
         if (not trade.is_short and rate <= trade_params['stoploss_price']) or \
                 (trade.is_short and rate >= trade_params['stoploss_price']):
             direction = trade_params['direction']
 
-            # Log additional debugging info
-            logger.debug(
-                f"Stoploss hit: Direction={direction}, is_short={trade.is_short}, "
-                f"Current price={rate}, Stoploss price={trade_params['stoploss_price']}, "
-                f"Entry price={trade.open_rate}, Profit ratio={current_profit:.4%}"
-            )
-
-            # Use the appropriate log function for stoploss hit
             log_stoploss_hit(
                 pair=trade.pair,
                 direction=direction,
@@ -285,30 +276,16 @@ class MACDTrendAdaptiveStrategy(IStrategy):
             return [ExitCheckTuple(exit_type=ExitType.STOP_LOSS,
                                    exit_reason=f"stoploss_{direction}_{trade_params['regime']}")]
 
-        # De-leverage for correct comparison with profit targets
-        # Handle both real Trade objects and mocks in tests
-        try:
-            leverage = float(trade.leverage)
-            if leverage <= 0:  # Safeguard against invalid leverage values
-                leverage = 1.0
-        except (TypeError, ValueError, AttributeError):
-            # Default to leverage 1.0 if attribute doesn't exist or can't be converted
-            leverage = 1.0
-
-        adjusted_profit = float(current_profit) / leverage
-
         # Check for default ROI exit if enabled
         if (self.strategy_config.use_default_roi_exit and
                 adjusted_profit >= self.strategy_config.default_roi and
                 adjusted_profit < trade_params['roi']):
-
-            # If profit is above default_roi but below adaptive ROI, exit with default_roi reason
             logger.debug(
-                f"Default ROI exit: {trade.pair}, profit={adjusted_profit:.2%}, "
+                f"Default ROI exit: {trade.pair}, "
+                f"profit={adjusted_profit:.2%}, "
                 f"default_roi={self.strategy_config.default_roi:.2%}, "
                 f"adaptive_roi={trade_params['roi']:.2%}"
             )
-
             return [ExitCheckTuple(exit_type=ExitType.ROI, exit_reason="default_roi")]
 
         # Check for adaptive ROI exit (take profit)
