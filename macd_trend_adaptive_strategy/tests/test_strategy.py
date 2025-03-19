@@ -859,7 +859,6 @@ def test_bot_start_with_existing_trades(mock_trades):
 
 
 def test_handle_missing_trade_recovery():
-    """Test the _handle_missing_trade method directly"""
     # Config for non-backtest mode
     config = {
         'user_data_dir': '/tmp',
@@ -873,7 +872,7 @@ def test_handle_missing_trade_recovery():
     trade = MagicMock(spec=Trade)
     trade.pair = "BTC/USDT"
     trade.open_rate = 20000
-    trade.open_date_utc = datetime.datetime.now() - datetime.timedelta(hours=2)
+    trade.open_date_utc = datetime.now() - timedelta(hours=2)
     trade.is_short = False
 
     # Patch _get_or_create_trade_cache to verify it's called correctly
@@ -881,7 +880,7 @@ def test_handle_missing_trade_recovery():
                       return_value={'direction': 'long', 'entry_rate': 20000}) as mock_get_create:
         with patch('strategy.logger') as mock_logger:
             # Call _handle_missing_trade
-            result = strategy._handle_missing_trade(trade, datetime.datetime.now())
+            result = strategy._handle_missing_trade(trade, datetime.now())
 
             # Verify _get_or_create_trade_cache was called with correct arguments
             mock_get_create.assert_called_once_with(
@@ -994,56 +993,10 @@ def test_handle_missing_trade_error_handling():
 
                 # Verify minimal safe values were returned
                 assert result['direction'] == 'unknown'
-                assert result['roi'] == 0.05  # Conservative ROI
-                assert result['stoploss'] == -0.05  # Conservative stoploss
+                assert result['roi'] == strategy.strategy_config.default_roi
+                assert result['stoploss'] == strategy.strategy_config.static_stoploss
                 assert 'error' in result
                 assert 'Unexpected error' in result['error']
-
-
-def test_calculate_fallback_stoploss_price():
-    """Test the _calculate_fallback_stoploss_price helper method"""
-    # Config for non-backtest mode
-    config = {
-        'user_data_dir': '/tmp',
-        'runmode': 'dry_run'
-    }
-
-    # Create strategy instance
-    strategy = MACDTrendAdaptiveStrategy(config)
-
-    # Test for long trade
-    long_entry_rate = 20000
-    stoploss_percentage = -0.05  # 5% stoploss
-    long_sl_price = strategy._calculate_fallback_stoploss_price(
-        long_entry_rate, stoploss_percentage, False
-    )
-
-    # Expected: 20000 * (1 - 0.05) = 19000
-    assert long_sl_price == long_entry_rate * (1 + stoploss_percentage)
-    assert long_sl_price < long_entry_rate
-
-    # Test for short trade
-    short_entry_rate = 20000
-    short_sl_price = strategy._calculate_fallback_stoploss_price(
-        short_entry_rate, stoploss_percentage, True
-    )
-
-    # Expected: 20000 * (1 + 0.05) = 21000
-    assert short_sl_price == short_entry_rate * (1 - stoploss_percentage)
-    assert short_sl_price > short_entry_rate
-
-    # Test error handling
-    with patch('strategy.logger') as mock_logger:
-        # Test with invalid entry rate causing an exception
-        result = strategy._calculate_fallback_stoploss_price(
-            "invalid", stoploss_percentage, False  # Invalid entry rate
-        )
-
-        # Verify error was logged
-        mock_logger.error.assert_called_once()
-
-        # Verify a default stoploss price was returned
-        assert result == 0.9 * 0  # 0 * 0.9 since entry rate is 0 after failure
 
 
 def test_bot_start_in_backtest_mode():
@@ -1072,24 +1025,18 @@ def test_bot_start_in_backtest_mode():
                 assert "trades to recover" not in args[0]
 
 
-@patch('strategy.Trade.get_trades_proxy')
-@patch.object(MACDTrendAdaptiveStrategy, 'roi_calculator')
-@patch.object(MACDTrendAdaptiveStrategy, 'stoploss_calculator')
-@patch.object(MACDTrendAdaptiveStrategy, 'regime_detector')
-def test_integration_bot_restart_recovery(
-        mock_regime_detector,
-        mock_stoploss_calculator,
-        mock_roi_calculator,
-        mock_get_trades_proxy,
-        mock_trades,
-        strategy
-):
+def test_integration_bot_restart_recovery(strategy, mock_trades):
     """
     Integration test for the entire trade recovery flow.
     Tests that trades are properly recovered and initialized in the cache.
     """
-    # Set up the mocks
-    mock_get_trades_proxy.return_value = mock_trades
+    # Create mock objects for all required components
+    mock_roi_calculator = MagicMock()
+    mock_stoploss_calculator = MagicMock()
+    mock_regime_detector = MagicMock()
+    mock_performance_tracker = MagicMock()
+
+    # Set up the mock return values
     mock_roi_calculator.get_trade_roi.return_value = 0.05
     mock_stoploss_calculator.calculate_dynamic_stoploss.return_value = -0.03
     mock_stoploss_calculator.calculate_stoploss_price.return_value = 19400
@@ -1097,22 +1044,44 @@ def test_integration_bot_restart_recovery(
     mock_regime_detector.is_counter_trend.return_value = False
     mock_regime_detector.is_aligned_trend.return_value = True
 
-    # Call bot_start
-    strategy.bot_start()
+    # Temporarily replace the strategy's components with mocks
+    original_roi_calculator = strategy.roi_calculator
+    original_stoploss_calculator = strategy.stoploss_calculator
+    original_regime_detector = strategy.regime_detector
+    original_performance_tracker = strategy.performance_tracker
 
-    # Verify trades were added to cache
-    assert len(strategy.trade_cache['active_trades']) == len(mock_trades)
+    try:
+        # Replace components with mocks
+        strategy.roi_calculator = mock_roi_calculator
+        strategy.stoploss_calculator = mock_stoploss_calculator
+        strategy.regime_detector = mock_regime_detector
+        strategy.performance_tracker = mock_performance_tracker
 
-    # Check that trade info was properly initialized
-    for trade in mock_trades:
-        trade_id = f"{trade.pair}_{trade.open_date_utc.timestamp()}"
-        assert trade_id in strategy.trade_cache['active_trades']
+        # Patch Trade.get_trades_proxy to return mock trades
+        with patch('strategy.Trade.get_trades_proxy', return_value=mock_trades):
+            # Call bot_start
+            strategy.bot_start()
 
-        cache_entry = strategy.trade_cache['active_trades'][trade_id]
-        direction = 'short' if trade.is_short else 'long'
+        # Verify trades were added to cache
+        assert len(strategy.trade_cache['active_trades']) == len(mock_trades)
 
-        assert cache_entry['direction'] == direction
-        assert cache_entry['entry_rate'] == trade.open_rate
-        assert cache_entry['roi'] == 0.05
-        assert cache_entry['stoploss'] == -0.03
-        assert cache_entry['regime'] == "bullish"
+        # Check that trade info was properly initialized
+        for trade in mock_trades:
+            trade_id = f"{trade.pair}_{trade.open_date_utc.timestamp()}"
+            assert trade_id in strategy.trade_cache['active_trades']
+
+            cache_entry = strategy.trade_cache['active_trades'][trade_id]
+            direction = 'short' if trade.is_short else 'long'
+
+            assert cache_entry['direction'] == direction
+            assert cache_entry['entry_rate'] == trade.open_rate
+            assert cache_entry['roi'] == 0.05
+            assert cache_entry['stoploss'] == -0.03
+            assert cache_entry['regime'] == "bullish"
+
+    finally:
+        # Restore original components
+        strategy.roi_calculator = original_roi_calculator
+        strategy.stoploss_calculator = original_stoploss_calculator
+        strategy.regime_detector = original_regime_detector
+        strategy.performance_tracker = original_performance_tracker

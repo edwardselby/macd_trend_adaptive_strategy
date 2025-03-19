@@ -261,7 +261,16 @@ class StrategyConfig:
                 for key, value in timeframe_config.items():
                     self._set_config_value(key, value)
 
-            # If no timeframe-specific section, check for global settings
+            # Check for global settings and apply them
+            if "global" in config:
+                global_config = config["global"]
+                logger.info(f"Found global configuration settings")
+
+                # Load all parameters from the global section
+                for key, value in global_config.items():
+                    self._set_config_value(key, value)
+
+            # If no timeframe-specific or global section, check for top-level parameters
             elif any(key for key in config if key not in self.DEFAULT_TIMEFRAME_CONFIGS):
                 # For backward compatibility, check for top-level parameters
                 for key, value in config.items():
@@ -425,7 +434,6 @@ class StrategyConfig:
         }
 
         return simplified_config
-
 
     @staticmethod
     def save_sample_config(file_path: str) -> None:

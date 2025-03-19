@@ -85,6 +85,8 @@ class ConfigValidator:
                     errors.append(
                         f"Parameter {param_name} has incorrect type: expected {param_type.__name__}, "
                         f"got {type(value).__name__}")
+                    # Continue validation for other parameters, but skip constraints for this one
+                    continue
 
                 # Check value constraints for numeric types
                 if value is not None and param_type in (int, float) and not cls._check_numeric_constraints(
@@ -99,7 +101,7 @@ class ConfigValidator:
 
     @staticmethod
     def _check_numeric_constraints(
-            value: Union[int, float],
+            value: Union[int, float, str],
             min_val: Optional[Union[int, float]],
             max_val: Optional[Union[int, float]],
             param_name: str,
@@ -118,6 +120,10 @@ class ConfigValidator:
         Returns:
             True if valid, False otherwise
         """
+        # Skip constraint checks if value is not a number
+        if not isinstance(value, (int, float)):
+            return True  # We've already logged the type error elsewhere
+
         if min_val is not None and value < min_val:
             errors.append(f"Parameter {param_name} value {value} is below minimum {min_val}")
             return False
@@ -138,41 +144,52 @@ class ConfigValidator:
             errors: List to append error messages to
         """
         # Check min_roi < max_roi
-        if (hasattr(config_obj, 'min_roi') and hasattr(config_obj, 'max_roi') and
-                config_obj.min_roi >= config_obj.max_roi):
-            errors.append(
-                f"Inconsistent ROI values: min_roi ({config_obj.min_roi}) must be less than "
-                f"max_roi ({config_obj.max_roi})")
+        if (hasattr(config_obj, 'min_roi') and hasattr(config_obj, 'max_roi')):
+            # Skip comparison if values are not numeric
+            if isinstance(config_obj.min_roi, (int, float)) and isinstance(config_obj.max_roi, (int, float)):
+                if config_obj.min_roi >= config_obj.max_roi:
+                    errors.append(
+                        f"Inconsistent ROI values: min_roi ({config_obj.min_roi}) must be less than "
+                        f"max_roi ({config_obj.max_roi})")
 
         # Check fast_length < slow_length for MACD
-        if (hasattr(config_obj, 'fast_length') and hasattr(config_obj, 'slow_length') and
-                config_obj.fast_length >= config_obj.slow_length):
-            errors.append(
-                f"Inconsistent MACD parameters: fast_length ({config_obj.fast_length}) must be less than "
-                f"slow_length ({config_obj.slow_length})")
+        if (hasattr(config_obj, 'fast_length') and hasattr(config_obj, 'slow_length')):
+            # Skip comparison if values are not numeric
+            if isinstance(config_obj.fast_length, (int, float)) and isinstance(config_obj.slow_length, (int, float)):
+                if config_obj.fast_length >= config_obj.slow_length:
+                    errors.append(
+                        f"Inconsistent MACD parameters: fast_length ({config_obj.fast_length}) must be less than "
+                        f"slow_length ({config_obj.slow_length})")
 
         # Check ema_fast < ema_slow for trend detection
-        if (hasattr(config_obj, 'ema_fast') and hasattr(config_obj, 'ema_slow') and
-                config_obj.ema_fast >= config_obj.ema_slow):
-            errors.append(
-                f"Inconsistent EMA parameters: ema_fast ({config_obj.ema_fast}) must be less than "
-                f"ema_slow ({config_obj.ema_slow})")
+        if (hasattr(config_obj, 'ema_fast') and hasattr(config_obj, 'ema_slow')):
+            # Skip comparison if values are not numeric
+            if isinstance(config_obj.ema_fast, (int, float)) and isinstance(config_obj.ema_slow, (int, float)):
+                if config_obj.ema_fast >= config_obj.ema_slow:
+                    errors.append(
+                        f"Inconsistent EMA parameters: ema_fast ({config_obj.ema_fast}) must be less than "
+                        f"ema_slow ({config_obj.ema_slow})")
 
         # Check min_win_rate < max_win_rate
-        if (hasattr(config_obj, 'min_win_rate') and hasattr(config_obj, 'max_win_rate') and
-                config_obj.min_win_rate >= config_obj.max_win_rate):
-            errors.append(
-                f"Inconsistent win rate parameters: min_win_rate ({config_obj.min_win_rate}) must be less than "
-                f"max_win_rate ({config_obj.max_win_rate})")
+        if (hasattr(config_obj, 'min_win_rate') and hasattr(config_obj, 'max_win_rate')):
+            # Skip comparison if values are not numeric
+            if isinstance(config_obj.min_win_rate, (int, float)) and isinstance(config_obj.max_win_rate, (int, float)):
+                if config_obj.min_win_rate >= config_obj.max_win_rate:
+                    errors.append(
+                        f"Inconsistent win rate parameters: min_win_rate ({config_obj.min_win_rate}) must be less than "
+                        f"max_win_rate ({config_obj.max_win_rate})")
 
         # Verify min_recent_trades_per_direction <= max_recent_trades
         if (hasattr(config_obj, 'min_recent_trades_per_direction') and
-                hasattr(config_obj, 'max_recent_trades') and
-                config_obj.min_recent_trades_per_direction > config_obj.max_recent_trades):
-            errors.append(
-                f"Inconsistent recent trades parameters: min_recent_trades_per_direction "
-                f"({config_obj.min_recent_trades_per_direction}) must be less than or equal to "
-                f"max_recent_trades ({config_obj.max_recent_trades})")
+                hasattr(config_obj, 'max_recent_trades')):
+            # Skip comparison if values are not numeric
+            if (isinstance(config_obj.min_recent_trades_per_direction, (int, float)) and
+                    isinstance(config_obj.max_recent_trades, (int, float))):
+                if config_obj.min_recent_trades_per_direction > config_obj.max_recent_trades:
+                    errors.append(
+                        f"Inconsistent recent trades parameters: min_recent_trades_per_direction "
+                        f"({config_obj.min_recent_trades_per_direction}) must be less than or equal to "
+                        f"max_recent_trades ({config_obj.max_recent_trades})")
 
     @classmethod
     def validate_and_fix(cls, config_obj: Any) -> Tuple[List[str], List[str]]:
@@ -185,11 +202,9 @@ class ConfigValidator:
         Returns:
             Tuple of (error_messages, fix_messages)
         """
-        errors = []
-        fixes = []
-
         # First, validate to collect all errors
-        validation_errors = cls.validate_config(config_obj)
+        errors = cls.validate_config(config_obj)
+        fixes = []
 
         # Handle missing required parameters by setting defaults
         for param_name, (param_type, required, min_val, max_val, default) in cls.PARAMETER_DEFINITIONS.items():
@@ -209,8 +224,14 @@ class ConfigValidator:
                             # Handle boolean string conversion
                             new_value = value.lower() in ('true', 'yes', '1', 'y')
                         else:
-                            # Standard type conversion
-                            new_value = param_type(value)
+                            # Ensure numeric types are properly converted
+                            if param_type in (int, float) and isinstance(value, str):
+                                # Use float for conversion, then convert to int if needed
+                                converted_value = float(value)
+                                new_value = param_type(converted_value)
+                            else:
+                                # Standard type conversion
+                                new_value = param_type(value)
 
                         setattr(config_obj, param_name, new_value)
                         fixes.append(
@@ -219,6 +240,9 @@ class ConfigValidator:
                         errors.append(
                             f"Could not convert parameter {param_name} from {type(value).__name__} "
                             f"to {param_type.__name__}")
+
+                # Refresh the value after potential conversion
+                value = getattr(config_obj, param_name)
 
                 # Fix value constraints if needed
                 if value is not None and param_type in (int, float):
@@ -231,11 +255,22 @@ class ConfigValidator:
                         fixes.append(
                             f"Adjusted parameter {param_name} from {value} to maximum value {max_val}")
 
+        # Logical consistency checks for specific parameter relationships
+        if hasattr(config_obj, 'min_roi') and hasattr(config_obj, 'max_roi'):
+            if config_obj.min_roi >= config_obj.max_roi:
+                config_obj.min_roi = min(config_obj.min_roi, config_obj.max_roi)
+                fixes.append(f"Adjusted min_roi to be less than max_roi")
+
+        if hasattr(config_obj, 'fast_length') and hasattr(config_obj, 'slow_length'):
+            if config_obj.fast_length >= config_obj.slow_length:
+                config_obj.fast_length = max(2, config_obj.slow_length - 1)
+                fixes.append(f"Adjusted fast_length to be less than slow_length")
+
         # Let validation run again to see if any errors remain
         remaining_errors = cls.validate_config(config_obj)
 
-        # Return unique errors and fixes
-        return list(set(remaining_errors)), list(set(fixes))
+        # If no new errors are found, return any earlier errors
+        return remaining_errors or errors, fixes
 
     @classmethod
     def get_parameter_info(cls) -> Dict[str, Dict[str, Any]]:

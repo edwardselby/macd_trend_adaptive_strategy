@@ -1,3 +1,6 @@
+from unittest.mock import patch
+
+
 def test_calculate_dynamic_stoploss(stoploss_calculator, regime_detector):
     """Test that dynamic stoploss is calculated correctly"""
     # Ensure dynamic stoploss is enabled
@@ -102,3 +105,40 @@ def test_calculate_stoploss_price(stoploss_calculator):
     # Expected price: 20000 * (1 + 0.05) = 21000
     assert short_sl_price == entry_rate * (1 - stoploss_percentage)
     assert short_sl_price > entry_rate
+
+
+def test_calculate_fallback_stoploss_price(stoploss_calculator):
+    """Test the fallback stoploss price calculation"""
+    # Test for long trade
+    long_entry_rate = 20000
+    stoploss_percentage = -0.05  # 5% stoploss
+    long_sl_price = stoploss_calculator.calculate_fallback_stoploss_price(
+        long_entry_rate, stoploss_percentage, False
+    )
+
+    # Expected: 20000 * (1 - 0.05) = 19000
+    assert long_sl_price == long_entry_rate * (1 + stoploss_percentage)
+    assert long_sl_price < long_entry_rate
+
+    # Test for short trade
+    short_entry_rate = 20000
+    short_sl_price = stoploss_calculator.calculate_fallback_stoploss_price(
+        short_entry_rate, stoploss_percentage, True
+    )
+
+    # Expected: 20000 * (1 + 0.05) = 21000
+    assert short_sl_price == short_entry_rate * (1 - stoploss_percentage)
+    assert short_sl_price > short_entry_rate
+
+    # Test error handling
+    with patch('macd_trend_adaptive_strategy.risk_management.stoploss_calculator.logger') as mock_logger:
+        # Test with invalid entry rate causing an exception
+        result = stoploss_calculator.calculate_fallback_stoploss_price(
+            "invalid", stoploss_percentage, False  # Invalid entry rate
+        )
+
+        # Verify errors were logged
+        assert mock_logger.error.call_count > 0
+
+        # Verify the fallback calculation
+        assert result == 0 * (1 - abs(stoploss_calculator.config.min_stoploss))

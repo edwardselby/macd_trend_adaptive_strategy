@@ -116,3 +116,37 @@ class StoplossCalculator:
         )
 
         return stoploss_price
+
+    def calculate_fallback_stoploss_price(self, entry_rate: float, stoploss: float, is_short: bool) -> float:
+        """
+        Calculate a fallback stoploss price when normal calculation fails.
+
+        Args:
+            entry_rate: Entry price of the trade
+            stoploss: Stoploss value as a negative decimal (e.g., -0.05 for 5%)
+            is_short: Whether this is a short trade
+
+        Returns:
+            float: Absolute price level for the stoploss
+        """
+        try:
+            # Convert entry_rate to float, handling potential invalid inputs
+            if not isinstance(entry_rate, (int, float)):
+                try:
+                    entry_rate = float(entry_rate)
+                except (ValueError, TypeError):
+                    logger.error(f"Invalid entry rate: {entry_rate}. Using 0 as fallback.")
+                    entry_rate = 0.0
+
+            # Use the existing method's logic for calculating stoploss price
+            return self.calculate_stoploss_price(entry_rate, stoploss, is_short)
+        except Exception as e:
+            logger.error(f"Error calculating fallback stoploss price: {e}")
+
+            # Conservative fallback using the same factors as in calculate_stoploss_price
+            if is_short:
+                # 10% above entry for shorts
+                return entry_rate * (1 + abs(self.config.min_stoploss))
+            else:
+                # 10% below entry for longs
+                return entry_rate * (1 - abs(self.config.min_stoploss))
