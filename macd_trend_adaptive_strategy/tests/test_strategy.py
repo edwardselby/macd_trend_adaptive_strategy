@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from freqtrade.enums.exittype import ExitType
 
-from macd_trend_adaptive_strategy.utils import create_trade_id
+from macd_trend_adaptive_strategy.utils import create_trade_id, get_direction
 from strategy import MACDTrendAdaptiveStrategy
 
 
@@ -106,6 +106,8 @@ def test_should_exit_roi_hit(strategy, mock_trade):
     mock_trade.open_rate = 20000
     mock_trade.open_date_utc = datetime.now()
     mock_trade.is_short = False
+    # Set the leverage attribute to 1.0 for testing
+    mock_trade.leverage = 1.0
 
     # Add trade to cache
     trade_id = f"{mock_trade.pair}_{mock_trade.open_date_utc.timestamp()}"
@@ -152,8 +154,9 @@ def test_should_exit_default_roi(strategy, mock_trade):
     mock_trade.open_rate = 20000
     mock_trade.open_date_utc = datetime.now()
     mock_trade.is_short = False
+    mock_trade.leverage = 1.0  # Set leverage for testing
 
-    # Make sure default ROI exit is enabled
+    # Make sure default ROI exit is enabled - MANUALLY ENABLE FOR THIS TEST
     strategy.strategy_config.use_default_roi_exit = True
 
     # Set the default ROI to a value below the adaptive ROI
@@ -196,7 +199,6 @@ def test_should_exit_default_roi(strategy, mock_trade):
 
     # Should not exit
     assert len(exit_signals) == 0
-
 
 def test_should_exit_stoploss_hit(strategy, mock_trade):
     """Test should_exit method when stoploss is hit"""
@@ -434,12 +436,12 @@ def test_stoploss_values_in_cache(strategy, mock_trade, mock_short_trade):
     # Initialize trades in strategy
     strategy.confirm_trade_entry(
         pair, "limit", 0.1, entry_rate, "GTC",
-        current_time, "test_entry", "buy"
+        current_time, "test_entry", "long"
     )
 
     strategy.confirm_trade_entry(
         pair, "limit", 0.1, entry_rate, "GTC",
-        short_time, "test_entry", "sell"
+        short_time, "test_entry", "short"
     )
 
     # Get trade IDs and retrieve cache entries
@@ -500,12 +502,12 @@ def test_stoploss_in_neutral_regime(strategy, mock_trade, mock_short_trade):
     strategy.trade_cache['active_trades'] = {}
     strategy.confirm_trade_entry(
         pair, "limit", 0.1, entry_rate, "GTC",
-        current_time, "test_entry", "buy"
+        current_time, "test_entry", "long"
     )
 
     strategy.confirm_trade_entry(
         pair, "limit", 0.1, entry_rate, "GTC",
-        short_time, "test_entry", "sell"
+        short_time, "test_entry", "short"
     )
 
     # Get trade IDs and cache entries
@@ -583,12 +585,12 @@ def test_stoploss_for_counter_and_aligned_trends(strategy, mock_trade, mock_shor
     strategy.trade_cache['active_trades'] = {}
     strategy.confirm_trade_entry(
         pair, "limit", 0.1, entry_rate, "GTC",
-        current_time, "test_entry", "buy"
+        current_time, "test_entry", "long"
     )
 
     strategy.confirm_trade_entry(
         pair, "limit", 0.1, entry_rate, "GTC",
-        short_time, "test_entry", "sell"
+        short_time, "test_entry", "short"
     )
 
     # Get trade IDs and cache entries
@@ -630,12 +632,12 @@ def test_stoploss_for_counter_and_aligned_trends(strategy, mock_trade, mock_shor
     strategy.trade_cache['active_trades'] = {}
     strategy.confirm_trade_entry(
         pair, "limit", 0.1, entry_rate, "GTC",
-        current_time, "test_entry", "buy"
+        current_time, "test_entry", "long"
     )
 
     strategy.confirm_trade_entry(
         pair, "limit", 0.1, entry_rate, "GTC",
-        short_time, "test_entry", "sell"
+        short_time, "test_entry", "short"
     )
 
     # Get updated cache entries

@@ -50,6 +50,10 @@ class StoplossCalculator:
         else:
             adjusted_stoploss = base_stoploss
 
+        # IMPORTANT: Ensure stoploss is always negative regardless of direction
+        if adjusted_stoploss >= 0:
+            adjusted_stoploss = self.config.min_stoploss  # Use minimum stoploss as fallback
+
         # For stoploss (negative values):
         # -0.01 (min_stoploss) is the smallest loss allowed (closest to zero)
         # -0.05 (max_stoploss) is the largest loss allowed (furthest from zero)
@@ -94,8 +98,12 @@ class StoplossCalculator:
             float: Absolute price level for the stoploss
         """
         if is_short:
-            stoploss_price = entry_rate * (1 - stoploss)
+            # For short trades, stoploss is reached when price goes UP
+            # If entry is 100 and stoploss is -0.05 (5%), stoploss price is 105
+            stoploss_price = entry_rate * (1 - stoploss)  # Note the subtraction of negative number = addition
         else:
+            # For long trades, stoploss is reached when price goes DOWN
+            # If entry is 100 and stoploss is -0.05 (5%), stoploss price is 95
             stoploss_price = entry_rate * (1 + stoploss)
 
         direction = "short" if is_short else "long"

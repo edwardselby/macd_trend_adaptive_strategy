@@ -1,11 +1,22 @@
+import json
 import logging
 import os
-
-from .mode_enum import StrategyMode
-from .timeframe_config import TimeframeConfig
-from .simplified_config import SimplifiedConfig
+from enum import Enum
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
+
+
+class StrategyMode(str, Enum):
+    """
+    Strategy modes that determine the timeframe and associated indicator settings
+    """
+    DEFAULT = "default"  # Default configuration (15m timeframe)
+    TIMEFRAME_1M = "1m"  # Optimized for 1-minute timeframe
+    TIMEFRAME_5M = "5m"  # Optimized for 5-minute timeframe
+    TIMEFRAME_15M = "15m"  # Optimized for 15-minute timeframe (same as DEFAULT)
+    TIMEFRAME_30M = "30m"  # Optimized for 30-minute timeframe
+    TIMEFRAME_1H = "1h"  # Optimized for 1-hour timeframe
 
 
 class StrategyConfig:
@@ -70,142 +81,364 @@ class StrategyConfig:
        - Example: With ROI = 3% and ratio = 0.5 (1:2), stoploss = -1.5%
     """
 
-    def __init__(self, mode: StrategyMode = StrategyMode.DEFAULT, timeframe: str = '15m'):
+    # Default configurations for different timeframes
+    DEFAULT_TIMEFRAME_CONFIGS = {
+        # 1-minute default
+        '1m': {
+            'risk_reward_ratio': "1:1.5",
+            'min_roi': 0.015,
+            'max_roi': 0.035,
+            # MACD parameters
+            'fast_length': 6,
+            'slow_length': 14,
+            'signal_length': 4,
+            # Trend detection parameters
+            'adx_period': 8,
+            'adx_threshold': 15,
+            'ema_fast': 3,
+            'ema_slow': 10,
+            # Other settings
+            'startup_candle_count': 20,
+            'roi_cache_update_interval': 15,
+        },
+        # 5-minute default
+        '5m': {
+            'risk_reward_ratio': "1:2",
+            'min_roi': 0.02,
+            'max_roi': 0.045,
+            # MACD parameters
+            'fast_length': 8,
+            'slow_length': 21,
+            'signal_length': 6,
+            # Trend detection parameters
+            'adx_period': 10,
+            'adx_threshold': 18,
+            'ema_fast': 5,
+            'ema_slow': 15,
+            # Other settings
+            'startup_candle_count': 25,
+            'roi_cache_update_interval': 30,
+        },
+        # 15-minute default (standard)
+        '15m': {
+            'risk_reward_ratio': "1:2",
+            'min_roi': 0.025,
+            'max_roi': 0.055,
+            # MACD parameters
+            'fast_length': 12,
+            'slow_length': 26,
+            'signal_length': 9,
+            # Trend detection parameters
+            'adx_period': 14,
+            'adx_threshold': 20,
+            'ema_fast': 8,
+            'ema_slow': 21,
+            # Other settings
+            'startup_candle_count': 30,
+            'roi_cache_update_interval': 60,
+        },
+        # 30-minute default
+        '30m': {
+            'risk_reward_ratio': "1:2.5",
+            'min_roi': 0.03,
+            'max_roi': 0.065,
+            # MACD parameters
+            'fast_length': 14,
+            'slow_length': 30,
+            'signal_length': 10,
+            # Trend detection parameters
+            'adx_period': 18,
+            'adx_threshold': 22,
+            'ema_fast': 10,
+            'ema_slow': 26,
+            # Other settings
+            'startup_candle_count': 35,
+            'roi_cache_update_interval': 120,
+        },
+        # 1-hour default
+        '1h': {
+            'risk_reward_ratio': "1:3",
+            'min_roi': 0.035,
+            'max_roi': 0.075,
+            # MACD parameters
+            'fast_length': 16,
+            'slow_length': 32,
+            'signal_length': 12,
+            # Trend detection parameters
+            'adx_period': 20,
+            'adx_threshold': 25,
+            'ema_fast': 12,
+            'ema_slow': 34,
+            # Other settings
+            'startup_candle_count': 40,
+            'roi_cache_update_interval': 300,
+        }
+    }
+
+    def __init__(self, mode: StrategyMode = StrategyMode.DEFAULT, config_path: str = None):
+        """
+        Initialize strategy configuration by loading timeframe-specific settings and
+        any user-provided overrides.
+
+        Args:
+            mode: Strategy mode (determines the timeframe)
+            config_path: Path to optional JSON configuration file with overrides
+        """
+        # Determine the timeframe based on selected mode
+        self.timeframe = self._get_timeframe_from_mode(mode)
+
+        # Load default config for this timeframe
+        self._load_default_config(self.timeframe)
+
+        # Override with user config if provided
+        if config_path:
+            self._load_user_config(config_path)
+
+        # Parse risk:reward ratio and calculate derived parameters
+        self._parse_risk_reward_ratio()
+        self._calculate_derived_parameters()
+
+        # Log configuration summary
+        logger.info(self.get_config_summary())
+
+    def _get_timeframe_from_mode(self, mode: StrategyMode) -> str:
+        """Convert strategy mode to timeframe string"""
+        if mode == StrategyMode.DEFAULT or mode == StrategyMode.TIMEFRAME_15M:
+            return '15m'
+        elif mode == StrategyMode.TIMEFRAME_1M:
+            return '1m'
+        elif mode == StrategyMode.TIMEFRAME_5M:
+            return '5m'
+        elif mode == StrategyMode.TIMEFRAME_30M:
+            return '30m'
+        elif mode == StrategyMode.TIMEFRAME_1H:
+            return '1h'
+        else:
+            logger.warning(f"Unknown mode {mode}, defaulting to 15m")
+            return '15m'
+
+    def _load_default_config(self, timeframe: str) -> None:
+        """
+        Load default configuration for the specified timeframe
+
+        Args:
+            timeframe: Trading timeframe ('1m', '5m', '15m', '30m', '1h')
+        """
+        if timeframe not in self.DEFAULT_TIMEFRAME_CONFIGS:
+            logger.warning(f"No default configuration for timeframe {timeframe}, using 15m defaults")
+            timeframe = '15m'
+
+        config = self.DEFAULT_TIMEFRAME_CONFIGS[timeframe]
+
+        # Load all configuration parameters
+        for key, value in config.items():
+            setattr(self, key, value)
+
         # Store the timeframe
         self.timeframe = timeframe
 
-        # Get timeframe-specific indicator settings
-        indicator_settings = TimeframeConfig.get_indicator_settings(timeframe)
+    def _load_user_config(self, config_path: str) -> None:
+        """
+        Load user configuration from JSON file with support for timeframe-specific settings
 
-        # Store indicator settings
-        self.fast_length = indicator_settings['fast_length']
-        self.slow_length = indicator_settings['slow_length']
-        self.signal_length = indicator_settings['signal_length']
-        self.adx_period = indicator_settings['adx_period']
-        self.adx_threshold = indicator_settings['adx_threshold']
-        self.ema_fast = indicator_settings['ema_fast']
-        self.ema_slow = indicator_settings['ema_slow']
-        self.startup_candle_count = indicator_settings['startup_candle_count']
-        self.roi_cache_update_interval = indicator_settings['roi_cache_update_interval']
+        Args:
+            config_path: Path to JSON configuration file
+        """
+        if not os.path.exists(config_path):
+            logger.warning(f"Configuration file {config_path} not found, using defaults")
+            return
 
-        # Apply time-based indicator adjustments
-        self._apply_indicator_config(mode)
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
 
-        # Load simplified configuration parameters for this timeframe
-        self._load_simplified_config(timeframe)
+            # First check if there's a timeframe-specific section
+            if self.timeframe in config:
+                timeframe_config = config[self.timeframe]
+                logger.info(f"Found specific configuration for timeframe {self.timeframe}")
 
-        # Log the configuration
-        logger.info(self.simplified_config.get_config_summary())
+                # Load all parameters from the timeframe section
+                for key, value in timeframe_config.items():
+                    self._set_config_value(key, value)
 
-    def _load_simplified_config(self, timeframe: str):
-        """Load simplified configuration parameters for the specified timeframe"""
-        # Look for configuration file in FreqTrade's user_data directory
-        config_path = os.path.join('user_data', 'macd_config.json')
+            # If no timeframe-specific section, check for global settings
+            elif any(key for key in config if key not in self.DEFAULT_TIMEFRAME_CONFIGS):
+                # For backward compatibility, check for top-level parameters
+                for key, value in config.items():
+                    if key not in self.DEFAULT_TIMEFRAME_CONFIGS:  # Skip timeframe sections
+                        self._set_config_value(key, value)
 
-        # Create the simplified config with timeframe-specific settings
-        self.simplified_config = SimplifiedConfig(config_path, timeframe)
+            logger.info(f"Loaded user configuration for {self.timeframe}")
 
-        # Copy simplified parameters to strategy config
-        self.base_roi = self.simplified_config.base_roi
-        self.min_roi = self.simplified_config.min_roi
-        self.max_roi = self.simplified_config.max_roi
+        except Exception as e:
+            logger.error(f"Error loading configuration from {config_path}: {e}")
+            logger.info(f"Using default configuration values for timeframe {self.timeframe}")
 
-        # Risk to reward ratio settings
-        self.risk_reward_ratio = self.simplified_config.risk_reward_ratio
-        self.min_stoploss = self.simplified_config.min_stoploss
-        self.max_stoploss = self.simplified_config.max_stoploss
-        self.static_stoploss = self.simplified_config.static_stoploss
-        self.use_dynamic_stoploss = self.simplified_config.use_dynamic_stoploss
+    def _set_config_value(self, key: str, value: Any) -> None:
+        """
+        Set a configuration value with appropriate type conversion
 
-        # Trend factor settings - simplified
-        self.counter_trend_factor = self.simplified_config.counter_trend_factor
-        self.aligned_trend_factor = self.simplified_config.aligned_trend_factor
-        self.counter_trend_stoploss_factor = self.simplified_config.counter_trend_stoploss_factor
-        self.aligned_trend_stoploss_factor = self.simplified_config.aligned_trend_stoploss_factor
+        Args:
+            key: Configuration parameter name
+            value: Parameter value from config file
+        """
+        try:
+            # Convert numeric values to float if needed
+            if key in ['min_roi', 'max_roi', 'adx_threshold']:
+                value = float(value)
+            elif key in ['fast_length', 'slow_length', 'signal_length',
+                         'adx_period', 'ema_fast', 'ema_slow',
+                         'startup_candle_count', 'roi_cache_update_interval']:
+                value = int(value)
 
-        # Win rate and regime settings - simplified
-        self.min_win_rate = self.simplified_config.min_win_rate
-        self.max_win_rate = self.simplified_config.max_win_rate
-        self.min_recent_trades_per_direction = self.simplified_config.min_recent_trades_per_direction
-        self.regime_win_rate_diff = self.simplified_config.regime_win_rate_diff
-        self.max_recent_trades = self.simplified_config.max_recent_trades
+            # Set the attribute
+            setattr(self, key, value)
+            logger.debug(f"Set configuration parameter {key} = {value}")
 
-        # Default ROI settings - simplified
-        self.default_roi = self.simplified_config.default_roi
-        self.long_roi_boost = self.simplified_config.long_roi_boost
-        self.use_default_roi_exit = self.simplified_config.use_default_roi_exit
+        except Exception as e:
+            logger.error(f"Error setting configuration parameter {key}: {e}")
 
-    def _apply_indicator_config(self, mode: StrategyMode):
-        """Apply specific indicator settings based on the selected mode/timeframe"""
+    def _parse_risk_reward_ratio(self) -> None:
+        """Parse risk:reward ratio string (e.g. "1:1.5") to numeric value"""
+        try:
+            risk, reward = self.risk_reward_ratio.split(':')
+            risk_value = float(risk.strip())
+            reward_value = float(reward.strip())
 
-        # Default 15m config - already set by default in __init__
-        if mode == StrategyMode.DEFAULT:
-            pass  # Use default values
+            # Calculate risk/reward ratio as a decimal
+            # Store both the string and float versions
+            self.risk_reward_ratio_str = self.risk_reward_ratio  # Save the original string
+            self.risk_reward_ratio_float = risk_value / reward_value
 
-        # 1-minute timeframe config
-        elif mode == StrategyMode.TIMEFRAME_1M:
-            # Set timeframe
-            self.timeframe = '1m'
+        except Exception as e:
+            logger.error(f"Error parsing risk:reward ratio '{self.risk_reward_ratio}': {e}")
+            logger.info("Using default risk:reward ratio of 1:2 (0.5)")
+            self.risk_reward_ratio_float = 0.5  # Default 1:2
 
-            # Update indicator settings from TimeframeConfig
-            indicator_settings = TimeframeConfig.get_indicator_settings('1m')
-            self.fast_length = indicator_settings['fast_length']
-            self.slow_length = indicator_settings['slow_length']
-            self.signal_length = indicator_settings['signal_length']
-            self.adx_period = indicator_settings['adx_period']
-            self.adx_threshold = indicator_settings['adx_threshold']
-            self.ema_fast = indicator_settings['ema_fast']
-            self.ema_slow = indicator_settings['ema_slow']
-            self.startup_candle_count = indicator_settings['startup_candle_count']
-            self.roi_cache_update_interval = indicator_settings['roi_cache_update_interval']
+    def _calculate_derived_parameters(self) -> None:
+        """Calculate all derived parameters from the base parameters"""
 
-        # 5-minute timeframe config
-        elif mode == StrategyMode.TIMEFRAME_5M:
-            # Set timeframe
-            self.timeframe = '5m'
+        # Base ROI is the average of min and max ROI
+        self.base_roi = (self.min_roi + self.max_roi) / 2
 
-            # Update indicator settings from TimeframeConfig
-            indicator_settings = TimeframeConfig.get_indicator_settings('5m')
-            self.fast_length = indicator_settings['fast_length']
-            self.slow_length = indicator_settings['slow_length']
-            self.signal_length = indicator_settings['signal_length']
-            self.adx_period = indicator_settings['adx_period']
-            self.adx_threshold = indicator_settings['adx_threshold']
-            self.ema_fast = indicator_settings['ema_fast']
-            self.ema_slow = indicator_settings['ema_slow']
-            self.startup_candle_count = indicator_settings['startup_candle_count']
-            self.roi_cache_update_interval = indicator_settings['roi_cache_update_interval']
+        # Stoploss calculations based on ROI and risk:reward ratio
+        # Stoploss values are negative
+        self.min_stoploss = -1 * self.min_roi * self.risk_reward_ratio_float
+        self.max_stoploss = -1 * self.max_roi * self.risk_reward_ratio_float
 
-        # 30-minute timeframe config
-        elif mode == StrategyMode.TIMEFRAME_30M:
-            # Set timeframe
-            self.timeframe = '30m'
+        # Static stoploss is based on base ROI
+        self.static_stoploss = -1 * self.base_roi * self.risk_reward_ratio_float
 
-            # Update indicator settings from TimeframeConfig
-            indicator_settings = TimeframeConfig.get_indicator_settings('30m')
-            self.fast_length = indicator_settings['fast_length']
-            self.slow_length = indicator_settings['slow_length']
-            self.signal_length = indicator_settings['signal_length']
-            self.adx_period = indicator_settings['adx_period']
-            self.adx_threshold = indicator_settings['adx_threshold']
-            self.ema_fast = indicator_settings['ema_fast']
-            self.ema_slow = indicator_settings['ema_slow']
-            self.startup_candle_count = indicator_settings['startup_candle_count']
-            self.roi_cache_update_interval = indicator_settings['roi_cache_update_interval']
+        # Store risk_reward_ratio as float in the traditional attribute name for compatibility
+        self.risk_reward_ratio = self.risk_reward_ratio_float
 
-        # 1-hour timeframe config
-        elif mode == StrategyMode.TIMEFRAME_1H:
-            # Set timeframe
-            self.timeframe = '1h'
+        # Set default values for parameters not in the config file
+        self._set_default_values()
 
-            # Update indicator settings from TimeframeConfig
-            indicator_settings = TimeframeConfig.get_indicator_settings('1h')
-            self.fast_length = indicator_settings['fast_length']
-            self.slow_length = indicator_settings['slow_length']
-            self.signal_length = indicator_settings['signal_length']
-            self.adx_period = indicator_settings['adx_period']
-            self.adx_threshold = indicator_settings['adx_threshold']
-            self.ema_fast = indicator_settings['ema_fast']
-            self.ema_slow = indicator_settings['ema_slow']
-            self.startup_candle_count = indicator_settings['startup_candle_count']
-            self.roi_cache_update_interval = indicator_settings['roi_cache_update_interval']
+
+    def _set_default_values(self) -> None:
+        """Set default values for parameters not in the configuration file"""
+
+        # Risk factor settings with defaults
+        if not hasattr(self, 'counter_trend_factor'):
+            self.counter_trend_factor = 0.5
+        if not hasattr(self, 'aligned_trend_factor'):
+            self.aligned_trend_factor = 1.0
+        if not hasattr(self, 'counter_trend_stoploss_factor'):
+            self.counter_trend_stoploss_factor = 0.5
+        if not hasattr(self, 'aligned_trend_stoploss_factor'):
+            self.aligned_trend_stoploss_factor = 1.0
+
+        # Win rate settings
+        if not hasattr(self, 'min_win_rate'):
+            self.min_win_rate = 0.2
+        if not hasattr(self, 'max_win_rate'):
+            self.max_win_rate = 0.8
+        if not hasattr(self, 'regime_win_rate_diff'):
+            self.regime_win_rate_diff = 0.2
+        if not hasattr(self, 'min_recent_trades_per_direction'):
+            self.min_recent_trades_per_direction = 5
+        if not hasattr(self, 'max_recent_trades'):
+            self.max_recent_trades = 10
+
+        # Other settings
+        if not hasattr(self, 'default_roi'):
+            self.default_roi = 0.04
+        if not hasattr(self, 'long_roi_boost'):
+            self.long_roi_boost = 0.0
+        # we disable this otherwise it will set a static take profit limit for all trades
+        if not hasattr(self, 'use_default_roi_exit'):
+            self.use_default_roi_exit = False
+        if not hasattr(self, 'use_dynamic_stoploss'):
+            self.use_dynamic_stoploss = True
+
+
+    def get_config_summary(self) -> str:
+        """Get a summary of the configuration for logging"""
+        return (
+            f"Strategy Configuration for {self.timeframe}:\n"
+            f"- R:R ratio: {self.risk_reward_ratio_str} ({self.risk_reward_ratio:.3f})\n"
+            f"- ROI: Min={self.min_roi:.2%}, Max={self.max_roi:.2%}, Base={self.base_roi:.2%}\n"
+            f"- Stoploss: Min={self.min_stoploss:.2%}, Max={self.max_stoploss:.2%}, Static={self.static_stoploss:.2%}\n"
+            f"- MACD: Fast={self.fast_length}, Slow={self.slow_length}, Signal={self.signal_length}\n"
+            f"- Trend: ADX Period={self.adx_period}, Threshold={self.adx_threshold}, EMA Fast={self.ema_fast}, EMA Slow={self.ema_slow}\n"
+            f"- Factors: Counter={self.counter_trend_factor:.2f}, Aligned={self.aligned_trend_factor:.2f}, "
+            f"Counter SL={self.counter_trend_stoploss_factor:.2f}, Aligned SL={self.aligned_trend_stoploss_factor:.2f}\n"
+        )
+
+
+    @staticmethod
+    def generate_sample_config() -> Dict[str, Any]:
+        """
+        Generate a sample configuration file with settings for all timeframes
+
+        Returns:
+            dict: Sample configuration dictionary
+        """
+        # Start with the default timeframe configs
+        config = StrategyConfig.DEFAULT_TIMEFRAME_CONFIGS.copy()
+
+        # Only keep the essential parameters for simplicity
+        simplified_config = {}
+        for timeframe, settings in config.items():
+            simplified_config[timeframe] = {
+                "risk_reward_ratio": settings["risk_reward_ratio"],
+                "min_roi": settings["min_roi"],
+                "max_roi": settings["max_roi"],
+                # Add optional indicator parameters
+                "fast_length": settings["fast_length"],
+                "slow_length": settings["slow_length"],
+                "signal_length": settings["signal_length"],
+                "adx_period": settings["adx_period"],
+                "adx_threshold": settings["adx_threshold"],
+                "ema_fast": settings["ema_fast"],
+                "ema_slow": settings["ema_slow"]
+            }
+
+        # Add global settings section
+        simplified_config["global"] = {
+            "counter_trend_factor": 0.5,
+            "aligned_trend_factor": 1.0,
+            "counter_trend_stoploss_factor": 0.5,
+            "aligned_trend_stoploss_factor": 1.0,
+            "use_dynamic_stoploss": True
+        }
+
+        return simplified_config
+
+
+    @staticmethod
+    def save_sample_config(file_path: str) -> None:
+        """
+        Save a sample configuration file
+
+        Args:
+            file_path: Path to save the configuration file
+        """
+        try:
+            config = StrategyConfig.generate_sample_config()
+            with open(file_path, 'w') as f:
+                json.dump(config, f, indent=4)
+            logger.info(f"Sample configuration saved to {file_path}")
+        except Exception as e:
+            logger.error(f"Error saving sample configuration to {file_path}: {e}")

@@ -24,6 +24,8 @@ def mock_trade():
     trade.open_date_utc = datetime.now() - timedelta(hours=1)
     trade.is_short = False
     trade.calc_profit_ratio = MagicMock(return_value=0.05)  # 5% profit
+    # Add leverage attribute for testing
+    trade.leverage = 1.0
     return trade
 
 
@@ -37,8 +39,9 @@ def mock_short_trade():
     trade.open_date_utc = datetime.now() - timedelta(hours=1)
     trade.is_short = True
     trade.calc_profit_ratio = MagicMock(return_value=0.05)  # 5% profit
+    # Add leverage attribute for testing
+    trade.leverage = 1.0
     return trade
-
 
 @pytest.fixture
 def sample_dataframe():
@@ -157,3 +160,22 @@ def strategy(mock_db_handler, performance_tracker, regime_detector, roi_calculat
     print(f"- Min stoploss: {strategy.strategy_config.min_stoploss}")
 
     return strategy
+
+
+@pytest.fixture
+def strategy_config():
+    """Return a strategy configuration object with test settings"""
+    # Use the new StrategyConfig class with the default mode
+    config = StrategyConfig(StrategyMode.DEFAULT)
+
+    # Make sure risk_reward_ratio is properly set to float
+    if not isinstance(config.risk_reward_ratio, float):
+        # Parse the R:R ratio to float if it's still a string
+        try:
+            risk, reward = config.risk_reward_ratio_str.split(':')
+            config.risk_reward_ratio = float(risk.strip()) / float(reward.strip())
+        except:
+            # Fallback
+            config.risk_reward_ratio = 0.5  # Default 1:2 ratio
+
+    return config

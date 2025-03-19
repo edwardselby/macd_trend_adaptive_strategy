@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime
 from typing import List, Optional
 
@@ -7,8 +8,7 @@ from freqtrade.enums.exittype import ExitType
 from freqtrade.persistence import Trade
 from freqtrade.strategy.interface import IStrategy, ExitCheckTuple
 
-from macd_trend_adaptive_strategy.config.mode_enum import StrategyMode
-from macd_trend_adaptive_strategy.config.strategy_config import StrategyConfig
+from macd_trend_adaptive_strategy.config.strategy_config import StrategyConfig, StrategyMode
 from macd_trend_adaptive_strategy.indicators.technical import calculate_indicators, populate_entry_signals
 from macd_trend_adaptive_strategy.performance.db_handler import DBHandler
 from macd_trend_adaptive_strategy.performance.tracker import PerformanceTracker
@@ -36,7 +36,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
     - min_roi (e.g., 0.02) - minimum target ROI
     - max_roi (e.g., 0.05) - maximum target ROI
 
-    Configure the strategy by creating a file at: user_data/macd_config.json
+    Configure the strategy by creating a file at: user_data/strategy_config.json
 
     Core strategy logic:
     - Uses MACD crossovers filtered by trend indicators for entry signals
@@ -87,11 +87,18 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         """
         super().__init__(config)
 
-        # Initialize strategy configuration with selected mode
-        self.strategy_config = StrategyConfig(self.STRATEGY_MODE)
+        # Path to the strategy configuration file
+        config_path = "user_data/strategy_config.json"
+
+        # Check if the config file exists, otherwise don't pass it
+        if os.path.exists(config_path):
+            # Initialize strategy configuration with selected mode and configuration file
+            self.strategy_config = StrategyConfig(self.STRATEGY_MODE, config_path)
+        else:
+            # Use default configuration without file
+            self.strategy_config = StrategyConfig(self.STRATEGY_MODE)
 
         # Set a realistic stoploss value (still used as the initial/base stoploss)
-        # This will be overridden by the value from simplified config
         self.stoploss = self.strategy_config.static_stoploss
 
         # Apply startup candle count setting
@@ -279,9 +286,32 @@ class MACDTrendAdaptiveStrategy(IStrategy):
                                    exit_reason=f"stoploss_{direction}_{trade_params['regime']}")]
 
         # De-leverage for correct comparison with profit targets
-        adjusted_profit = current_profit / trade.leverage
+        # Handle both real Trade objects and mocks in tests
+        try:
+            leverage = float(trade.leverage)
+            if leverage <= 0:  # Safeguard against invalid leverage values
+                leverage = 1.0
+        except (TypeError, ValueError, AttributeError):
+            # Default to leverage 1.0 if attribute doesn't exist or can't be converted
+            leverage = 1.0
 
-        # Check for ROI exit (take profit)
+        adjusted_profit = float(current_profit) / leverage
+
+        # Check for default ROI exit if enabled
+        if (self.strategy_config.use_default_roi_exit and
+                adjusted_profit >= self.strategy_config.default_roi and
+                adjusted_profit < trade_params['roi']):
+
+            # If profit is above default_roi but below adaptive ROI, exit with default_roi reason
+            logger.debug(
+                f"Default ROI exit: {trade.pair}, profit={adjusted_profit:.2%}, "
+                f"default_roi={self.strategy_config.default_roi:.2%}, "
+                f"adaptive_roi={trade_params['roi']:.2%}"
+            )
+
+            return [ExitCheckTuple(exit_type=ExitType.ROI, exit_reason="default_roi")]
+
+        # Check for adaptive ROI exit (take profit)
         if adjusted_profit >= trade_params['roi']:
             trade_type = ("countertrend" if trade_params['is_counter_trend']
                           else "aligned" if trade_params['is_aligned_trend']
