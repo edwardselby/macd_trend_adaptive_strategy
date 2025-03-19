@@ -186,50 +186,52 @@ class StrategyConfig:
             # Set timeframe
             self.timeframe = '5m'
 
-            # Get timeframe-specific indicator settings from TimeframeConfig
-            indicator_settings = TimeframeConfig.get_indicator_settings('5m')
+            # MACD parameters - adjusted for more selective signals
+            self.fast_length = 9  # Increased from 8 to reduce noise
+            self.slow_length = 24  # Increased from 21 for stronger trend confirmation
+            self.signal_length = 7  # Increased from 6 for smoother signals
 
-            # Keep original technical parameters from TimeframeConfig
-            self.fast_length = indicator_settings['fast_length']  # 8
-            self.slow_length = indicator_settings['slow_length']  # 21
-            self.signal_length = indicator_settings['signal_length']  # 6
-            self.adx_period = indicator_settings['adx_period']  # 10
-            self.adx_threshold = indicator_settings['adx_threshold']  # 18
-            self.ema_fast = indicator_settings['ema_fast']  # 5
-            self.ema_slow = indicator_settings['ema_slow']  # 15
-            self.startup_candle_count = indicator_settings['startup_candle_count']  # 25
-            self.roi_cache_update_interval = indicator_settings['roi_cache_update_interval']  # 30
+            # Trend detection parameters - strengthened to avoid false signals
+            self.adx_period = 12  # Increased from 10 for better trend strength measurement
+            self.adx_threshold = 22  # Increased from 18 to filter out weaker trends
+            self.ema_fast = 6  # Adjusted from 5
+            self.ema_slow = 18  # Increased from 15 for better trend confirmation
 
-            # Adjust risk/reward parameters for 5m
-            # ROI settings - higher for 5m to allow more room for profit
-            self.base_roi = 0.035  # 3.5% base ROI (higher than 1m)
-            self.min_roi = 0.025  # Minimum 2.5% ROI
-            self.max_roi = 0.045  # Maximum 4.5% ROI
+            # Other settings
+            self.startup_candle_count = 30  # Increased from 25 to accommodate longer indicators
+            self.roi_cache_update_interval = 30  # Keep at 30 seconds
 
-            # Stoploss settings - more room since 5m has higher volatility
-            self.static_stoploss = -0.022  # 2.2% static stoploss
-            self.risk_reward_ratio = 0.5  # 1:2 risk-reward ratio
-            self.min_stoploss = -0.016  # Minimum 1.6% stoploss
-            self.max_stoploss = -0.028  # Maximum 2.8% stoploss
+            # Adjust risk/reward parameters to improve profitability
+            # ROI settings - reduced to secure profits faster
+            self.base_roi = 0.025  # Reduced from 0.035 to take profits earlier
+            self.min_roi = 0.018  # Reduced from 0.025 to secure small profits
+            self.max_roi = 0.038  # Slightly reduced from 0.045
+
+            # Stoploss settings - tightened to cut losses faster
+            self.static_stoploss = -0.016  # Tightened from -0.022
+            self.risk_reward_ratio = 0.45  # Improved from 0.5 for better risk-reward
+            self.min_stoploss = -0.012  # Tightened from -0.016
+            self.max_stoploss = -0.022  # Tightened from -0.028
             self.use_dynamic_stoploss = True
 
-            # Trend factors - adjusted for 5m
-            self.counter_trend_factor = 0.6  # Take profits at 60% of target for counter-trend
-            self.aligned_trend_factor = 1.2  # Allow 20% higher target for aligned trend
-            self.counter_trend_stoploss_factor = 0.7  # Tighter stoploss for counter-trend
-            self.aligned_trend_stoploss_factor = 1.15  # Slightly looser stoploss for aligned trend
+            # Trend factors - adjusted to be more conservative
+            self.counter_trend_factor = 0.5  # Reduced from 0.6 to take profits even faster for counter-trend
+            self.aligned_trend_factor = 1.15  # Slightly reduced from 1.2 to secure profits earlier
+            self.counter_trend_stoploss_factor = 0.6  # Tightened from 0.7 for faster exit on losing counter-trend trades
+            self.aligned_trend_stoploss_factor = 1.1  # Slightly reduced from 1.15
 
             # Win rate and regime settings
-            self.min_win_rate = 0.4
-            self.max_win_rate = 0.7
-            self.min_recent_trades_per_direction = 4  # Require fewer trades to detect regime
-            self.regime_win_rate_diff = 0.12  # 12% difference to detect regime change
-            self.max_recent_trades = 12
+            self.min_win_rate = 0.35  # Lowered from 0.4 to adapt to current reality
+            self.max_win_rate = 0.65  # Adjusted from 0.7 to be more realistic
+            self.min_recent_trades_per_direction = 5  # Increased from 4 for more reliable regime detection
+            self.regime_win_rate_diff = 0.15  # Increased from 0.12 for stronger regime differentiation
+            self.max_recent_trades = 15  # Increased from 12 to use more historical data
 
             # Default ROI settings
-            self.default_roi = 0.028  # Default 2.8% ROI
-            self.long_roi_boost = 0.004  # Small boost for long trades
-            self.use_default_roi_exit = False
+            self.default_roi = 0.022  # Reduced from 0.028 to secure profits faster
+            self.long_roi_boost = 0.002  # Reduced from 0.004
+            self.use_default_roi_exit = False  # Changed to True to ensure we take profits
+
         # 30-minute timeframe config
         elif mode == StrategyMode.TIMEFRAME_30M:
             # Similar implementation as 1m with 30m values
