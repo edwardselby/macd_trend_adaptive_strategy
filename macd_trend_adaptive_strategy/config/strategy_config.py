@@ -185,16 +185,15 @@ class StrategyConfig:
         self._load_default_config(self.timeframe)
 
         # Override with user config if provided
-        if config_path:
-            self._load_user_config(config_path)
+        config_loaded = self._load_user_config(config_path) if config_path else False
 
-        # Validate and fix configuration
+        # Only run validation if a custom config was loaded or we're using defaults
         errors, fixes = ConfigValidator.validate_and_fix(self)
 
-        if errors:
+        # Only log validation errors if we loaded a config
+        if config_loaded and errors:
             logger.warning(f"Configuration validation errors: {errors}")
-
-        if fixes:
+        elif fixes:
             logger.info(f"Configuration fixes applied: {fixes}")
 
         # Parse risk:reward ratio and calculate derived parameters
@@ -240,7 +239,7 @@ class StrategyConfig:
         # Store the timeframe
         self.timeframe = timeframe
 
-    def _load_user_config(self, config_path: str) -> None:
+    def _load_user_config(self, config_path: str) -> bool:
         """
         Load user configuration from JSON file with support for timeframe-specific settings
 
@@ -249,7 +248,7 @@ class StrategyConfig:
         """
         if not os.path.exists(config_path):
             logger.warning(f"Configuration file {config_path} not found, using defaults")
-            return
+            return False
 
         try:
             with open(config_path, 'r') as f:
@@ -281,10 +280,12 @@ class StrategyConfig:
                         self._set_config_value(key, value)
 
             logger.info(f"Loaded user configuration for {self.timeframe}")
+            return True
 
         except Exception as e:
             logger.error(f"Error loading configuration from {config_path}: {e}")
             logger.info(f"Using default configuration values for timeframe {self.timeframe}")
+            return False
 
     def _set_config_value(self, key: str, value: Any) -> None:
         """
@@ -338,9 +339,6 @@ class StrategyConfig:
         self.min_stoploss = -1 * self.min_roi * self.risk_reward_ratio_float
         self.max_stoploss = -1 * self.max_roi * self.risk_reward_ratio_float
 
-        # Static stoploss is based on base ROI
-        self.static_stoploss = -1 * self.base_roi * self.risk_reward_ratio_float
-
         # Store risk_reward_ratio as float in the traditional attribute name for compatibility
         self.risk_reward_ratio = self.risk_reward_ratio_float
 
@@ -379,24 +377,13 @@ class StrategyConfig:
         if not hasattr(self, 'use_dynamic_stoploss'):
             self.use_dynamic_stoploss = True
 
-        # Default exits
-        if not hasattr(self, 'use_default_roi_exit'):
-            self.use_default_roi_exit = False
-        if not hasattr(self, 'use_default_stoploss_exit'):
-            self.use_default_stoploss_exit = False
-        if not hasattr(self, 'default_roi'):
-            self.default_roi = 0.04
-        if not hasattr(self, 'default_stoploss'):
-            self.default_stoploss = -0.04
-
-
     def get_config_summary(self) -> str:
         """Get a summary of the configuration for logging"""
         return (
             f"Strategy Configuration for {self.timeframe}:\n"
             f"- R:R ratio: {self.risk_reward_ratio_str} ({self.risk_reward_ratio:.3f})\n"
             f"- ROI: Min={self.min_roi:.2%}, Max={self.max_roi:.2%}, Base={self.base_roi:.2%}\n"
-            f"- Stoploss: Min={self.min_stoploss:.2%}, Max={self.max_stoploss:.2%}, Static={self.static_stoploss:.2%}\n"
+            f"- Stoploss: Min={self.min_stoploss:.2%}, Max={self.max_stoploss:.2%}\n"
             f"- MACD: Fast={self.fast_length}, Slow={self.slow_length}, Signal={self.signal_length}\n"
             f"- Trend: ADX Period={self.adx_period}, Threshold={self.adx_threshold}, EMA Fast={self.ema_fast}, EMA Slow={self.ema_slow}\n"
             f"- Factors: Counter={self.counter_trend_factor:.2f}, Aligned={self.aligned_trend_factor:.2f}, "

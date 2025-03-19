@@ -54,9 +54,6 @@ class MACDTrendAdaptiveStrategy(IStrategy):
     STRATEGY_MODE = StrategyMode.TIMEFRAME_5M
     # =====================================
 
-    # Strategy Parameters - Setting minimal_roi to empty dict to ensure we only use custom_exit logic
-    minimal_roi = {}  # Disable standard ROI table - we'll use custom_exit exclusively
-
     # Futures and leverage settings
     can_short = True
     leverage_config = {"*": {"*": 10.0}}
@@ -134,6 +131,12 @@ class MACDTrendAdaptiveStrategy(IStrategy):
 
         # Simplified trade cache initialization
         self.trade_cache = {'active_trades': {}}
+
+        # set the stoploss below the minimum as a backstop
+        self.stoploss = (self.strategy_config.min_stoploss - self.strategy_config.max_stoploss)
+
+        # set the minimal roi above the maximum as a backstop
+        self.minimal_roi = {0: (self.strategy_config.min_roi + self.strategy_config.max_roi)}
 
         # Logging initialization details
         log_strategy_initialization(
@@ -248,16 +251,6 @@ class MACDTrendAdaptiveStrategy(IStrategy):
 
         adjusted_profit = float(current_profit) / leverage
 
-        # Check for default stoploss exit if enabled
-        if (self.strategy_config.use_default_stoploss_exit and
-                adjusted_profit <= self.strategy_config.default_stoploss):
-            logger.debug(
-                f"Default Stoploss exit: {trade.pair}, "
-                f"profit={adjusted_profit:.2%}, "
-                f"default_stoploss={self.strategy_config.default_stoploss:.2%}"
-            )
-            return [ExitCheckTuple(exit_type=ExitType.STOP_LOSS, exit_reason="default_stoploss")]
-
         # Check for stoploss hit
         if (not trade.is_short and rate <= trade_params['stoploss_price']) or \
                 (trade.is_short and rate >= trade_params['stoploss_price']):
@@ -275,18 +268,6 @@ class MACDTrendAdaptiveStrategy(IStrategy):
 
             return [ExitCheckTuple(exit_type=ExitType.STOP_LOSS,
                                    exit_reason=f"stoploss_{direction}_{trade_params['regime']}")]
-
-        # Check for default ROI exit if enabled
-        if (self.strategy_config.use_default_roi_exit and
-                adjusted_profit >= self.strategy_config.default_roi and
-                adjusted_profit < trade_params['roi']):
-            logger.debug(
-                f"Default ROI exit: {trade.pair}, "
-                f"profit={adjusted_profit:.2%}, "
-                f"default_roi={self.strategy_config.default_roi:.2%}, "
-                f"adaptive_roi={trade_params['roi']:.2%}"
-            )
-            return [ExitCheckTuple(exit_type=ExitType.ROI, exit_reason="default_roi")]
 
         # Check for adaptive ROI exit (take profit)
         if adjusted_profit >= trade_params['roi']:

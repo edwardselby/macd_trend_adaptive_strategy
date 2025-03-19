@@ -217,8 +217,12 @@ class ConfigValidator:
             if hasattr(config_obj, param_name):
                 value = getattr(config_obj, param_name)
 
+                # Skip None values
+                if value is None:
+                    continue
+
                 # Fix type if possible
-                if value is not None and not isinstance(value, param_type):
+                if not isinstance(value, param_type):
                     try:
                         if param_type == bool and isinstance(value, str):
                             # Handle boolean string conversion
@@ -236,16 +240,18 @@ class ConfigValidator:
                         setattr(config_obj, param_name, new_value)
                         fixes.append(
                             f"Converted parameter {param_name} from {type(value).__name__} to {param_type.__name__}")
+
+                        # Update value after conversion for constraint checks
+                        value = new_value
                     except (ValueError, TypeError):
                         errors.append(
                             f"Could not convert parameter {param_name} from {type(value).__name__} "
                             f"to {param_type.__name__}")
+                        # Skip constraint checks if conversion failed
+                        continue
 
-                # Refresh the value after potential conversion
-                value = getattr(config_obj, param_name)
-
-                # Fix value constraints if needed
-                if value is not None and param_type in (int, float):
+                # Now that value is correctly typed, fix value constraints if needed
+                if param_type in (int, float):
                     if min_val is not None and value < min_val:
                         setattr(config_obj, param_name, min_val)
                         fixes.append(
