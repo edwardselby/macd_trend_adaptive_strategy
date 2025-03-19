@@ -176,16 +176,60 @@ class StrategyConfig:
 
             # Default ROI settings
             self.default_roi = 0.025  # Default ROI target
-            self.long_roi_boost = 0.005  # Small boost for long trades
-            self.use_default_roi_exit = True
+            self.long_roi_boost = 0.0  # Small boost for long trades
+            self.use_default_roi_exit = False
             self.use_dynamic_stoploss = True
 
         # 5-minute timeframe config
+        # 5-minute timeframe config with original technical setup
         elif mode == StrategyMode.TIMEFRAME_5M:
-            # Similar implementation as 1m with 5m values
-            # ... (implementation code here)
-            pass
+            # Set timeframe
+            self.timeframe = '5m'
 
+            # Get timeframe-specific indicator settings from TimeframeConfig
+            indicator_settings = TimeframeConfig.get_indicator_settings('5m')
+
+            # Keep original technical parameters from TimeframeConfig
+            self.fast_length = indicator_settings['fast_length']  # 8
+            self.slow_length = indicator_settings['slow_length']  # 21
+            self.signal_length = indicator_settings['signal_length']  # 6
+            self.adx_period = indicator_settings['adx_period']  # 10
+            self.adx_threshold = indicator_settings['adx_threshold']  # 18
+            self.ema_fast = indicator_settings['ema_fast']  # 5
+            self.ema_slow = indicator_settings['ema_slow']  # 15
+            self.startup_candle_count = indicator_settings['startup_candle_count']  # 25
+            self.roi_cache_update_interval = indicator_settings['roi_cache_update_interval']  # 30
+
+            # Adjust risk/reward parameters for 5m
+            # ROI settings - higher for 5m to allow more room for profit
+            self.base_roi = 0.035  # 3.5% base ROI (higher than 1m)
+            self.min_roi = 0.025  # Minimum 2.5% ROI
+            self.max_roi = 0.045  # Maximum 4.5% ROI
+
+            # Stoploss settings - more room since 5m has higher volatility
+            self.static_stoploss = -0.022  # 2.2% static stoploss
+            self.risk_reward_ratio = 0.5  # 1:2 risk-reward ratio
+            self.min_stoploss = -0.016  # Minimum 1.6% stoploss
+            self.max_stoploss = -0.028  # Maximum 2.8% stoploss
+            self.use_dynamic_stoploss = True
+
+            # Trend factors - adjusted for 5m
+            self.counter_trend_factor = 0.6  # Take profits at 60% of target for counter-trend
+            self.aligned_trend_factor = 1.2  # Allow 20% higher target for aligned trend
+            self.counter_trend_stoploss_factor = 0.7  # Tighter stoploss for counter-trend
+            self.aligned_trend_stoploss_factor = 1.15  # Slightly looser stoploss for aligned trend
+
+            # Win rate and regime settings
+            self.min_win_rate = 0.4
+            self.max_win_rate = 0.7
+            self.min_recent_trades_per_direction = 4  # Require fewer trades to detect regime
+            self.regime_win_rate_diff = 0.12  # 12% difference to detect regime change
+            self.max_recent_trades = 12
+
+            # Default ROI settings
+            self.default_roi = 0.028  # Default 2.8% ROI
+            self.long_roi_boost = 0.004  # Small boost for long trades
+            self.use_default_roi_exit = False
         # 30-minute timeframe config
         elif mode == StrategyMode.TIMEFRAME_30M:
             # Similar implementation as 1m with 30m values

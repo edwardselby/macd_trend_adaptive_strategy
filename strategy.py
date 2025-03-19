@@ -55,14 +55,11 @@ class MACDTrendAdaptiveStrategy(IStrategy):
 
     # ===== CONFIGURABLE PARAMETER SET =====
     # Change this to select a different parameter set
-    STRATEGY_MODE = StrategyMode.TIMEFRAME_1M
+    STRATEGY_MODE = StrategyMode.TIMEFRAME_5M
     # =====================================
 
     # Strategy Parameters - Setting minimal_roi to empty dict to ensure we only use custom_exit logic
     minimal_roi = {}  # Disable standard ROI table - we'll use custom_exit exclusively
-
-    # Set the timeframe for this strategy
-    timeframe = '1m'
 
     # Futures and leverage settings
     can_short = True
