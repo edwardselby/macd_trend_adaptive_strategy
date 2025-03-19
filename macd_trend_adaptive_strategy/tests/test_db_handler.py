@@ -201,3 +201,103 @@ def test_backtest_performance_clearing(mock_connect, mock_config):
     assert data['short']['wins'] == 0
     assert data['short']['losses'] == 0
     assert data['short']['last_trades'] == []
+
+
+@patch('sqlite3.connect')
+def test_backtest_optimization(mock_connect):
+    """Test the in-memory caching and optimization for backtests"""
+    from datetime import datetime, timedelta
+    from macd_trend_adaptive_strategy.performance.db_handler import DBHandler
+
+    # Create a backtest config
+    backtest_config = {'user_data_dir': '/tmp', 'runmode': 'backtest'}
+
+    # Initialize db handler with backtest config
+    handler = DBHandler(backtest_config)
+    handler.set_strategy_name("TestStrategy")
+
+    # Verify the in_memory_cache is initialized
+    assert hasattr(handler, 'in_memory_cache')
+    assert isinstance(handler.in_memory_cache, dict)
+    assert handler.in_memory_cache == {}
+
+    # Verify the save interval settings
+    assert handler.backtest_save_interval > 0
+    assert handler.backtest_trade_batch > 0
+
+    # Mock the initial state for our test
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_connect.return_value = mock_conn
+    mock_conn.cursor.return_value = mock_cursor
+
+    # Initial performance data to test with
+    test_data = {
+        'long': {'wins': 5, 'losses': 3, 'consecutive_wins': 2,
+                 'consecutive_losses': 0, 'last_trades': [1, 0, 1], 'total_profit': 0.2},
+        'short': {'wins': 4, 'losses': 4, 'consecutive_wins': 0,
+                  'consecutive_losses': 1, 'last_trades': [0, 0, 1], 'total_profit': 0.1}
+    }
+
+    # Reset the mock for testing
+    mock_connect.reset_mock()
+
+    # Test saving data - first save should update in-memory cache but not write to DB
+    # due to optimization
+
+    # Set a recent last_save_time
+    current_time = int(datetime.now().timestamp())
+    handler.last_save_time = current_time - 10  # 10 seconds ago
+    handler.trades_since_last_save = 1  # Low count
+
+    # Save data
+    handler.save_performance_data(test_data)
+
+    # Verify in-memory cache was updated
+    assert handler.in_memory_cache == test_data
+
+    # Verify that connect was NOT called (no DB write)
+    mock_connect.assert_not_called()
+
+    # Test save after trade batch threshold is reached
+    handler.trades_since_last_save = handler.backtest_trade_batch
+    handler.save_performance_data(test_data)
+
+    # Now connect should be called
+    mock_connect.assert_called_once()
+
+    # Reset mocks for next test
+    mock_connect.reset_mock()
+    handler.trades_since_last_save = 1  # Reset counter
+
+    # Test save after time interval is exceeded
+    handler.last_save_time = current_time - (handler.backtest_save_interval + 10)  # Interval + 10 seconds ago
+    handler.save_performance_data(test_data)
+
+    # Connect should be called again
+    mock_connect.assert_called_once()
+
+    # Test that the time and counter are reset after a save
+    assert handler.last_save_time >= current_time
+    assert handler.trades_since_last_save == 0
+
+    # Now test loading with in-memory cache
+    new_data = {
+        'long': {'wins': 10, 'losses': 5},
+        'short': {'wins': 8, 'losses': 3}
+    }
+
+    # Set in-memory cache
+    handler.in_memory_cache = new_data
+
+    # Reset mock
+    mock_connect.reset_mock()
+
+    # Load data - should use in-memory cache without DB access
+    loaded_data = handler.load_performance_data()
+
+    # Verify connect was not called (used cache)
+    mock_connect.assert_not_called()
+
+    # Verify returned data matches cache
+    assert loaded_data == new_data

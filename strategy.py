@@ -444,41 +444,140 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         """
         Handle case where a trade is not found in cache.
         This can happen after bot restarts or when handling existing trades.
+        Includes improved error handling.
 
         Args:
             trade: The trade object
             current_time: Current datetime
 
         Returns:
-            dict: New cache entry
+            dict: New cache entry or empty dict if creation failed
         """
-        trade_id = create_trade_id(trade.pair, trade.open_date_utc)
-        direction = get_direction(trade.is_short)
+        try:
+            # Validate trade object has required attributes
+            required_attrs = ['pair', 'open_rate', 'open_date_utc', 'is_short']
+            missing_attrs = [attr for attr in required_attrs if not hasattr(trade, attr)]
 
-        logger.warning(
-            f"Trade {trade_id} not found in cache, reconstructing parameters. "
-            f"Pair: {trade.pair}, Direction: {direction}, "
-            f"Open rate: {trade.open_rate}, Open date: {trade.open_date_utc}"
-        )
+            if missing_attrs:
+                logger.error(
+                    f"Cannot recreate trade parameters - trade object missing attributes: {missing_attrs}"
+                )
+                # Return empty cache with basic info to prevent further errors
+                return {
+                    'direction': 'unknown',
+                    'entry_rate': 0,
+                    'roi': self.strategy_config.default_roi,
+                    'stoploss': self.strategy_config.static_stoploss,
+                    'stoploss_price': 0,
+                    'is_counter_trend': False,
+                    'is_aligned_trend': False,
+                    'regime': 'neutral',
+                    'last_updated': int(current_time.timestamp()),
+                    'error': 'Missing trade attributes'
+                }
 
-        # Create new cache entry
-        cache_entry = self._get_or_create_trade_cache(
-            trade_id,
-            trade.pair,
-            trade.open_rate,
-            trade.open_date_utc,
-            trade.is_short
-        )
+            trade_id = create_trade_id(trade.pair, trade.open_date_utc)
+            direction = get_direction(trade.is_short)
 
-        # Log additional information about the reconstructed trade
-        logger.info(
-            f"Reconstructed trade {trade_id}: "
-            f"ROI: {cache_entry['roi']:.2%}, SL: {cache_entry['stoploss']:.2%}, "
-            f"Regime: {cache_entry['regime']}, "
-            f"{'Counter-trend' if cache_entry['is_counter_trend'] else 'Aligned' if cache_entry['is_aligned_trend'] else 'Neutral'}"
-        )
+            logger.warning(
+                f"Trade {trade_id} not found in cache, reconstructing parameters. "
+                f"Pair: {trade.pair}, Direction: {direction}, "
+                f"Open rate: {trade.open_rate}, Open date: {trade.open_date_utc}"
+            )
 
-        return cache_entry
+            # Try to create new cache entry with error handling
+            try:
+                cache_entry = self._get_or_create_trade_cache(
+                    trade_id,
+                    trade.pair,
+                    trade.open_rate,
+                    trade.open_date_utc,
+                    trade.is_short
+                )
+
+                # Log additional information about the reconstructed trade
+                logger.info(
+                    f"Reconstructed trade {trade_id}: "
+                    f"ROI: {cache_entry['roi']:.2%}, SL: {cache_entry['stoploss']:.2%}, "
+                    f"Regime: {cache_entry['regime']}, "
+                    f"{'Counter-trend' if cache_entry['is_counter_trend'] else 'Aligned' if cache_entry['is_aligned_trend'] else 'Neutral'}"
+                )
+
+                return cache_entry
+
+            except Exception as e:
+                logger.error(f"Error creating cache entry for trade {trade_id}: {e}")
+                # Create a fallback entry with conservative values
+                fallback_entry = {
+                    'direction': direction,
+                    'entry_rate': trade.open_rate,
+                    'roi': self.strategy_config.default_roi,
+                    'stoploss': self.strategy_config.static_stoploss,
+                    'stoploss_price': self._calculate_fallback_stoploss_price(
+                        trade.open_rate, self.strategy_config.static_stoploss, trade.is_short
+                    ),
+                    'is_counter_trend': False,
+                    'is_aligned_trend': False,
+                    'regime': 'neutral',
+                    'last_updated': int(current_time.timestamp()),
+                    'error': f'Error: {str(e)}'
+                }
+
+                # Add to cache to prevent repeated errors
+                self.trade_cache['active_trades'][trade_id] = fallback_entry
+
+                logger.warning(
+                    f"Using fallback parameters for trade {trade_id}: "
+                    f"ROI: {fallback_entry['roi']:.2%}, SL: {fallback_entry['stoploss']:.2%}"
+                )
+
+                return fallback_entry
+
+        except Exception as outer_e:
+            # Handle any unexpected errors in the overall process
+            logger.error(f"Unexpected error handling missing trade: {outer_e}")
+            # Return minimal safe values
+            return {
+                'direction': 'unknown',
+                'entry_rate': 0,
+                'roi': 0.05,  # Conservative ROI
+                'stoploss': -0.05,  # Conservative stoploss
+                'stoploss_price': 0,
+                'is_counter_trend': False,
+                'is_aligned_trend': False,
+                'regime': 'neutral',
+                'last_updated': int(current_time.timestamp()),
+                'error': f'Unexpected error: {str(outer_e)}'
+            }
+
+    def _calculate_fallback_stoploss_price(self, entry_rate: float, stoploss: float, is_short: bool) -> float:
+        """
+        Calculate a fallback stoploss price when normal calculation fails.
+
+        Args:
+            entry_rate: Entry price of the trade
+            stoploss: Stoploss value as a negative decimal (e.g., -0.05 for 5%)
+            is_short: Whether this is a short trade
+
+        Returns:
+            float: Absolute price level for the stoploss
+        """
+        try:
+            if is_short:
+                # For short trades, stoploss is reached when price goes UP
+                # If entry is 100 and stoploss is -0.05 (5%), stoploss price is 105
+                return entry_rate * (1 - stoploss)
+            else:
+                # For long trades, stoploss is reached when price goes DOWN
+                # If entry is 100 and stoploss is -0.05 (5%), stoploss price is 95
+                return entry_rate * (1 + stoploss)
+        except Exception as e:
+            logger.error(f"Error calculating fallback stoploss price: {e}")
+            # Return a very conservative stoploss (10% from entry)
+            if is_short:
+                return entry_rate * 1.1  # 10% above entry for shorts
+            else:
+                return entry_rate * 0.9  # 10% below entry for longs
 
     def bot_start(self) -> None:
         """

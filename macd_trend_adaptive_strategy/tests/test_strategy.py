@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from freqtrade.enums.exittype import ExitType
+from freqtrade.persistence import Trade
 
 from macd_trend_adaptive_strategy.utils import create_trade_id, get_direction
 from strategy import MACDTrendAdaptiveStrategy
@@ -781,3 +782,337 @@ def test_trade_cache_on_exit(strategy, mock_trade):
 
     # Verify trade was removed from cache
     assert trade_id not in strategy.trade_cache['active_trades']
+
+
+@pytest.fixture
+def mock_trades():
+    """Create mock trades for testing"""
+    trade1 = MagicMock(spec=Trade)
+    trade1.pair = "BTC/USDT"
+    trade1.open_rate = 20000
+    trade1.open_date_utc = datetime.now() - timedelta(hours=2)
+    trade1.is_short = False
+
+    trade2 = MagicMock(spec=Trade)
+    trade2.pair = "ETH/USDT"
+    trade2.open_rate = 1500
+    trade2.open_date_utc = datetime.now() - timedelta(hours=1)
+    trade2.is_short = True
+
+    return [trade1, trade2]
+
+
+def test_bot_start_no_trades():
+    """Test bot_start with no existing trades"""
+    # Config for non-backtest mode
+    config = {
+        'user_data_dir': '/tmp',
+        'runmode': 'dry_run'
+    }
+
+    # Create strategy instance
+    strategy = MACDTrendAdaptiveStrategy(config)
+
+    # Patch the Trade.get_trades_proxy to return empty list
+    with patch('strategy.Trade.get_trades_proxy', return_value=[]) as mock_get_trades:
+        with patch('strategy.logger') as mock_logger:
+            # Call bot_start
+            strategy.bot_start()
+
+            # Verify Trade.get_trades_proxy was called with is_open=True
+            mock_get_trades.assert_called_once_with(is_open=True)
+
+            # Verify log message
+            mock_logger.info.assert_any_call("No open trades found to recover")
+
+            # Verify trade_cache is empty (no trades recovered)
+            assert len(strategy.trade_cache['active_trades']) == 0
+
+
+def test_bot_start_with_existing_trades(mock_trades):
+    """Test bot_start with existing trades that need recovery"""
+    # Config for non-backtest mode
+    config = {
+        'user_data_dir': '/tmp',
+        'runmode': 'dry_run'
+    }
+
+    # Create strategy instance
+    strategy = MACDTrendAdaptiveStrategy(config)
+
+    # Patch the necessary methods/functions
+    with patch('strategy.Trade.get_trades_proxy', return_value=mock_trades) as mock_get_trades:
+        with patch('strategy.logger') as mock_logger:
+            with patch.object(strategy, '_handle_missing_trade') as mock_handle_missing:
+                # Call bot_start
+                strategy.bot_start()
+
+                # Verify Trade.get_trades_proxy was called
+                mock_get_trades.assert_called_once_with(is_open=True)
+
+                # Verify _handle_missing_trade was called for each trade
+                assert mock_handle_missing.call_count == len(mock_trades)
+
+                # Verify log messages
+                mock_logger.info.assert_any_call("Strategy starting - checking for existing trades to recover")
+                mock_logger.info.assert_any_call(f"Found {len(mock_trades)} open trades to recover")
+
+
+def test_handle_missing_trade_recovery():
+    """Test the _handle_missing_trade method directly"""
+    # Config for non-backtest mode
+    config = {
+        'user_data_dir': '/tmp',
+        'runmode': 'dry_run'
+    }
+
+    # Create strategy instance
+    strategy = MACDTrendAdaptiveStrategy(config)
+
+    # Create a mock trade
+    trade = MagicMock(spec=Trade)
+    trade.pair = "BTC/USDT"
+    trade.open_rate = 20000
+    trade.open_date_utc = datetime.datetime.now() - datetime.timedelta(hours=2)
+    trade.is_short = False
+
+    # Patch _get_or_create_trade_cache to verify it's called correctly
+    with patch.object(strategy, '_get_or_create_trade_cache',
+                      return_value={'direction': 'long', 'entry_rate': 20000}) as mock_get_create:
+        with patch('strategy.logger') as mock_logger:
+            # Call _handle_missing_trade
+            result = strategy._handle_missing_trade(trade, datetime.datetime.now())
+
+            # Verify _get_or_create_trade_cache was called with correct arguments
+            mock_get_create.assert_called_once_with(
+                f"{trade.pair}_{trade.open_date_utc.timestamp()}",
+                trade.pair,
+                trade.open_rate,
+                trade.open_date_utc,
+                trade.is_short
+            )
+
+            # Verify warning was logged
+            mock_logger.warning.assert_called_once()
+
+            # Verify result is the cache entry
+            assert result == {'direction': 'long', 'entry_rate': 20000}
+
+
+def test_handle_missing_trade_error_handling():
+    """Test error handling in _handle_missing_trade method"""
+    # Config for non-backtest mode
+    config = {
+        'user_data_dir': '/tmp',
+        'runmode': 'dry_run'
+    }
+
+    # Create strategy instance
+    strategy = MACDTrendAdaptiveStrategy(config)
+
+    # Create a mock trade with all required attributes
+    valid_trade = MagicMock(spec=Trade)
+    valid_trade.pair = "BTC/USDT"
+    valid_trade.open_rate = 20000
+    valid_trade.open_date_utc = datetime.now() - timedelta(hours=2)
+    valid_trade.is_short = False
+
+    # Test case 1: _get_or_create_trade_cache raises an exception
+    with patch.object(strategy, '_get_or_create_trade_cache',
+                      side_effect=Exception("Test exception")) as mock_get_create:
+        with patch('strategy.logger') as mock_logger:
+            # Call _handle_missing_trade
+            result = strategy._handle_missing_trade(valid_trade, datetime.now())
+
+            # Verify _get_or_create_trade_cache was called
+            mock_get_create.assert_called_once()
+
+            # Verify error was logged
+            mock_logger.error.assert_called()
+
+            # Verify fallback values were returned
+            assert result['error'].startswith('Error:')
+            assert result['direction'] == 'long'
+            assert result['roi'] == strategy.strategy_config.default_roi
+            assert result['stoploss'] == strategy.strategy_config.static_stoploss
+            assert result['regime'] == 'neutral'
+
+            # Verify fallback stoploss price is calculated correctly for long trade
+            assert result['stoploss_price'] < valid_trade.open_rate
+
+    # Create a mock short trade
+    valid_short_trade = MagicMock(spec=Trade)
+    valid_short_trade.pair = "BTC/USDT"
+    valid_short_trade.open_rate = 20000
+    valid_short_trade.open_date_utc = datetime.now() - timedelta(hours=2)
+    valid_short_trade.is_short = True
+
+    # Test case 2: Test fallback stoploss price calculation for short trade
+    with patch.object(strategy, '_get_or_create_trade_cache',
+                      side_effect=Exception("Test exception")) as mock_get_create:
+        # Call _handle_missing_trade for short trade
+        result = strategy._handle_missing_trade(valid_short_trade, datetime.now())
+
+        # Verify fallback stoploss price is above entry for short
+        assert result['stoploss_price'] > valid_short_trade.open_rate
+
+    # Test case 3: Missing attribute in trade object
+    incomplete_trade = MagicMock(spec=Trade)
+    # Missing open_rate
+    incomplete_trade.pair = "BTC/USDT"
+    incomplete_trade.open_date_utc = datetime.now() - timedelta(hours=2)
+    incomplete_trade.is_short = False
+
+    # Remove the open_rate attribute
+    del incomplete_trade.open_rate
+
+    with patch('strategy.logger') as mock_logger:
+        # Call _handle_missing_trade with incomplete trade
+        result = strategy._handle_missing_trade(incomplete_trade, datetime.now())
+
+        # Verify error about missing attribute was logged
+        mock_logger.error.assert_called_once()
+        assert 'missing attributes' in mock_logger.error.call_args[0][0].lower()
+
+        # Verify conservative default values were used
+        assert result['direction'] == 'unknown'
+        assert result['entry_rate'] == 0
+        assert 'error' in result
+        assert 'Missing trade attributes' in result['error']
+
+    # Test case 4: Unexpected outer exception
+    with patch.object(strategy, '_get_or_create_trade_cache') as mock_get_create:
+        # Make _get_direction raise an exception
+        with patch('strategy.get_direction', side_effect=Exception("Unexpected error")):
+            with patch('strategy.logger') as mock_logger:
+                # Call _handle_missing_trade
+                result = strategy._handle_missing_trade(valid_trade, datetime.now())
+
+                # Verify error was logged
+                mock_logger.error.assert_called_once()
+                assert 'Unexpected error' in mock_logger.error.call_args[0][0]
+
+                # Verify minimal safe values were returned
+                assert result['direction'] == 'unknown'
+                assert result['roi'] == 0.05  # Conservative ROI
+                assert result['stoploss'] == -0.05  # Conservative stoploss
+                assert 'error' in result
+                assert 'Unexpected error' in result['error']
+
+
+def test_calculate_fallback_stoploss_price():
+    """Test the _calculate_fallback_stoploss_price helper method"""
+    # Config for non-backtest mode
+    config = {
+        'user_data_dir': '/tmp',
+        'runmode': 'dry_run'
+    }
+
+    # Create strategy instance
+    strategy = MACDTrendAdaptiveStrategy(config)
+
+    # Test for long trade
+    long_entry_rate = 20000
+    stoploss_percentage = -0.05  # 5% stoploss
+    long_sl_price = strategy._calculate_fallback_stoploss_price(
+        long_entry_rate, stoploss_percentage, False
+    )
+
+    # Expected: 20000 * (1 - 0.05) = 19000
+    assert long_sl_price == long_entry_rate * (1 + stoploss_percentage)
+    assert long_sl_price < long_entry_rate
+
+    # Test for short trade
+    short_entry_rate = 20000
+    short_sl_price = strategy._calculate_fallback_stoploss_price(
+        short_entry_rate, stoploss_percentage, True
+    )
+
+    # Expected: 20000 * (1 + 0.05) = 21000
+    assert short_sl_price == short_entry_rate * (1 - stoploss_percentage)
+    assert short_sl_price > short_entry_rate
+
+    # Test error handling
+    with patch('strategy.logger') as mock_logger:
+        # Test with invalid entry rate causing an exception
+        result = strategy._calculate_fallback_stoploss_price(
+            "invalid", stoploss_percentage, False  # Invalid entry rate
+        )
+
+        # Verify error was logged
+        mock_logger.error.assert_called_once()
+
+        # Verify a default stoploss price was returned
+        assert result == 0.9 * 0  # 0 * 0.9 since entry rate is 0 after failure
+
+
+def test_bot_start_in_backtest_mode():
+    """Test bot_start in backtest mode (should be a no-op)"""
+    # Config for backtest mode
+    config = {
+        'user_data_dir': '/tmp',
+        'runmode': 'backtest'
+    }
+
+    # Create strategy instance
+    strategy = MACDTrendAdaptiveStrategy(config)
+
+    # Patch Trade.get_trades_proxy to ensure it's not called in backtest mode
+    with patch('strategy.Trade.get_trades_proxy') as mock_get_trades:
+        with patch('strategy.logger') as mock_logger:
+            # Call bot_start
+            strategy.bot_start()
+
+            # Verify Trade.get_trades_proxy was NOT called
+            mock_get_trades.assert_not_called()
+
+            # Verify no relevant log messages
+            for call in mock_logger.info.call_args_list:
+                args = call[0]
+                assert "trades to recover" not in args[0]
+
+
+@patch('strategy.Trade.get_trades_proxy')
+@patch.object(MACDTrendAdaptiveStrategy, 'roi_calculator')
+@patch.object(MACDTrendAdaptiveStrategy, 'stoploss_calculator')
+@patch.object(MACDTrendAdaptiveStrategy, 'regime_detector')
+def test_integration_bot_restart_recovery(
+        mock_regime_detector,
+        mock_stoploss_calculator,
+        mock_roi_calculator,
+        mock_get_trades_proxy,
+        mock_trades,
+        strategy
+):
+    """
+    Integration test for the entire trade recovery flow.
+    Tests that trades are properly recovered and initialized in the cache.
+    """
+    # Set up the mocks
+    mock_get_trades_proxy.return_value = mock_trades
+    mock_roi_calculator.get_trade_roi.return_value = 0.05
+    mock_stoploss_calculator.calculate_dynamic_stoploss.return_value = -0.03
+    mock_stoploss_calculator.calculate_stoploss_price.return_value = 19400
+    mock_regime_detector.detect_regime.return_value = "bullish"
+    mock_regime_detector.is_counter_trend.return_value = False
+    mock_regime_detector.is_aligned_trend.return_value = True
+
+    # Call bot_start
+    strategy.bot_start()
+
+    # Verify trades were added to cache
+    assert len(strategy.trade_cache['active_trades']) == len(mock_trades)
+
+    # Check that trade info was properly initialized
+    for trade in mock_trades:
+        trade_id = f"{trade.pair}_{trade.open_date_utc.timestamp()}"
+        assert trade_id in strategy.trade_cache['active_trades']
+
+        cache_entry = strategy.trade_cache['active_trades'][trade_id]
+        direction = 'short' if trade.is_short else 'long'
+
+        assert cache_entry['direction'] == direction
+        assert cache_entry['entry_rate'] == trade.open_rate
+        assert cache_entry['roi'] == 0.05
+        assert cache_entry['stoploss'] == -0.03
+        assert cache_entry['regime'] == "bullish"
