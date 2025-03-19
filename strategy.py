@@ -136,7 +136,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         self.stoploss = self.strategy_config.static_stoploss
 
         # Use the already calculated default_roi as the minimal_roi
-        self.minimal_roi = {0: self.strategy_config.default_roi}
+        self.minimal_roi = {"0": self.strategy_config.default_roi}
 
         # Logging initialization details
         log_strategy_initialization(
