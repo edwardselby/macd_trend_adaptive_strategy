@@ -4,7 +4,7 @@ import os
 from enum import Enum
 from typing import Dict, Any
 
-from macd_trend_adaptive_strategy.config.config_validator import ConfigValidator
+from ..config.config_validator import ConfigValidator
 
 logger = logging.getLogger(__name__)
 
