@@ -185,7 +185,7 @@ class StrategyConfig:
         self._load_default_config(self.timeframe)
 
         # Override with user config if provided
-        config_loaded = self._load_user_config(config_path) if config_path else False
+        config_loaded = self._load_user_config(config_path)
 
         # Only run validation if a custom config was loaded or we're using defaults
         errors, fixes = ConfigValidator.validate_and_fix(self)
@@ -246,7 +246,7 @@ class StrategyConfig:
         Args:
             config_path: Path to JSON configuration file
         """
-        if not os.path.exists(config_path):
+        if not config_path or not os.path.exists(config_path):
             logger.warning(f"Configuration file {config_path} not found, using defaults")
             return False
 

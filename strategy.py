@@ -82,11 +82,8 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         super().__init__(config)
 
         # Use the strategy mode to load configuration
-        config_path = "config/strategy_config.json"
-        self.strategy_config = StrategyConfig(
-            self.STRATEGY_MODE,
-            config_path if os.path.exists(config_path) else None
-        )
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config/strategy_config.json")
+        self.strategy_config = StrategyConfig(self.STRATEGY_MODE, config_path)
 
         # Simplify attribute setting
         self.startup_candle_count = self.strategy_config.startup_candle_count
