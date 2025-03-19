@@ -23,17 +23,20 @@ from macd_trend_adaptive_strategy.utils import (
 
 # Set up strategy-wide logging
 logger = logging.getLogger(__name__)
-
-# For detailed debug messages (only when needed)
-# logger.setLevel(logging.DEBUG)
-
 logger.setLevel(logging.INFO)
 
 
 class MACDTrendAdaptiveStrategy(IStrategy):
     """
     Enhanced MACD Strategy with Trend Detection, Market Regime Detection,
-    Fully Adaptive ROI and Dynamic Stoploss
+    Fully Adaptive ROI and Dynamic Stoploss - Simplified Configuration Version
+
+    This strategy uses just three configurable parameters:
+    - risk_reward_ratio (expressed as "1:2") - risk-to-reward ratio for calculating stoplosses
+    - min_roi (e.g., 0.02) - minimum target ROI
+    - max_roi (e.g., 0.05) - maximum target ROI
+
+    Configure the strategy by creating a file at: user_data/macd_config.json
 
     Core strategy logic:
     - Uses MACD crossovers filtered by trend indicators for entry signals
@@ -41,13 +44,6 @@ class MACDTrendAdaptiveStrategy(IStrategy):
     - Applies fully adaptive take-profit levels based on win rate performance
     - Dynamic stoploss calculation based on ROI and configurable risk-reward ratio
     - Adjusts both ROI and stoploss based on whether trades align with or counter the trend
-
-    Available modes:
-    - default: Balanced configuration with moderate risk/reward
-    - 1m: Optimized for 1-minute timeframe with faster signals and tighter risk controls
-    - 5m: Optimized for 5-minute timeframe
-    - 30m: Optimized for 30-minute timeframe
-    - 1h: Optimized for 1-hour timeframe with more conservative parameters
     """
 
     # Version 3 API - required for proper leverage
@@ -95,6 +91,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         self.strategy_config = StrategyConfig(self.STRATEGY_MODE)
 
         # Set a realistic stoploss value (still used as the initial/base stoploss)
+        # This will be overridden by the value from simplified config
         self.stoploss = self.strategy_config.static_stoploss
 
         # Apply startup candle count setting
@@ -109,10 +106,10 @@ class MACDTrendAdaptiveStrategy(IStrategy):
 
         # Check if we're in backtest mode
         self.is_backtest = (
-            config.get('runmode') in ('backtest', 'hyperopt') or
-            config.get('backtest', False) or  # This parameter exists in backtest config
-            'timerange' in config or  # Timerange is set for backtests
-            'export' in config  # Export is typically set for backtests
+                config.get('runmode') in ('backtest', 'hyperopt') or
+                config.get('backtest', False) or  # This parameter exists in backtest config
+                'timerange' in config or  # Timerange is set for backtests
+                'export' in config  # Export is typically set for backtests
         )
 
         # Clear performance data at the start of each backtest
@@ -167,6 +164,9 @@ class MACDTrendAdaptiveStrategy(IStrategy):
                 'max': self.strategy_config.max_stoploss
             }
         )
+
+        # Override freqtrade's stoploss setting with our derived value
+        self.stoploss = self.strategy_config.static_stoploss
 
     def confirm_trade_entry(self, pair: str, order_type: str, amount: float, rate: float,
                             time_in_force: str, current_time: datetime, entry_tag: Optional[str],
@@ -298,12 +298,6 @@ class MACDTrendAdaptiveStrategy(IStrategy):
 
             return [ExitCheckTuple(exit_type=ExitType.ROI,
                                    exit_reason=f"adaptive_roi_{trade_type}_{trade_params['regime']}")]
-
-        # Apply default ROI if enabled
-        if (self.strategy_config.use_default_roi_exit and
-                current_profit >= self.strategy_config.default_roi):
-            logger.info(f"Default ROI exit - Profit: {current_profit:.2%}")
-            return [ExitCheckTuple(exit_type=ExitType.ROI, exit_reason="default_roi")]
 
         # Otherwise, continue holding
         return []
