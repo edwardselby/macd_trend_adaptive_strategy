@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Add README documentation (d5c9f68)
 
 ### Improved
+- Make 30m strategy profitable
 - Make 15m strategy more profitable (9162a52)
 - Make 15m strategy profitable (6de9fbd)
 - Make 5m strategy profitable (521c49b)
