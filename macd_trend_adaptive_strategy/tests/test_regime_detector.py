@@ -7,48 +7,28 @@ def test_detect_regime(regime_detector, performance_tracker):
     regime_detector.config.regime_win_rate_diff = 0.2
     regime_detector.config.min_recent_trades_per_direction = 4
 
-    # Patch the methods in performance_tracker that get called by detect_regime
-    # This avoids testing the mock but instead tests how detect_regime uses these methods
+    # Test scenarios
+    scenarios = [
+        # win_rates, trade_counts, expected_regime
+        {"long_wr": 0.75, "short_wr": 0.45, "trades": 10, "expected": "bullish"},
+        {"long_wr": 0.40, "short_wr": 0.70, "trades": 10, "expected": "bearish"},
+        {"long_wr": 0.55, "short_wr": 0.45, "trades": 10, "expected": "neutral"},
+        {"long_wr": 0.75, "short_wr": 0.45, "trades": 2, "expected": "neutral"}  # Not enough trades
+    ]
 
-    # Scenario 1: Bullish regime (long win rate significantly higher)
-    with patch.object(performance_tracker, 'get_recent_win_rate',
-                      side_effect=lambda direction: 0.75 if direction == "long" else 0.45):
-        with patch.object(performance_tracker, 'get_recent_trades_count', return_value=10):
-            # Call the actual implementation
-            regime = regime_detector.detect_regime()
+    for scenario in scenarios:
+        # Patch win rate and trade count methods
+        with patch.object(performance_tracker, 'get_recent_win_rate',
+                          side_effect=lambda direction: scenario["long_wr"] if direction == "long" else scenario[
+                              "short_wr"]):
+            with patch.object(performance_tracker, 'get_recent_trades_count', return_value=scenario["trades"]):
+                # Call the actual implementation
+                regime = regime_detector.detect_regime()
 
-            # Long win rate - short win rate = 0.3, which > 0.2 threshold
-            assert regime == "bullish", f"Expected bullish regime, got {regime}"
-
-    # Scenario 2: Bearish regime (short win rate significantly higher)
-    with patch.object(performance_tracker, 'get_recent_win_rate',
-                      side_effect=lambda direction: 0.4 if direction == "long" else 0.7):
-        with patch.object(performance_tracker, 'get_recent_trades_count', return_value=10):
-            # Call the actual implementation
-            regime = regime_detector.detect_regime()
-
-            # Short win rate - long win rate = 0.3, which > 0.2 threshold
-            assert regime == "bearish", f"Expected bearish regime, got {regime}"
-
-    # Scenario 3: Neutral regime (win rates are close)
-    with patch.object(performance_tracker, 'get_recent_win_rate',
-                      side_effect=lambda direction: 0.55 if direction == "long" else 0.45):
-        with patch.object(performance_tracker, 'get_recent_trades_count', return_value=10):
-            # Call the actual implementation
-            regime = regime_detector.detect_regime()
-
-            # Difference = 0.1, which < 0.2 threshold
-            assert regime == "neutral", f"Expected neutral regime, got {regime}"
-
-    # Scenario 4: Not enough trades
-    with patch.object(performance_tracker, 'get_recent_win_rate',
-                      side_effect=lambda direction: 0.75 if direction == "long" else 0.45):
-        with patch.object(performance_tracker, 'get_recent_trades_count', return_value=2):
-            # Call the actual implementation
-            regime = regime_detector.detect_regime()
-
-            # Should default to neutral when not enough trades
-            assert regime == "neutral", f"Expected neutral regime when not enough trades, got {regime}"
+                # Check result
+                assert regime == scenario["expected"], \
+                    f"Expected {scenario['expected']} regime with long WR {scenario['long_wr']}, " \
+                    f"short WR {scenario['short_wr']}, trades {scenario['trades']}, got {regime}"
 
 
 def test_is_counter_trend(regime_detector):

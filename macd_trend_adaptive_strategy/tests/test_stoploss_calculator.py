@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from macd_trend_adaptive_strategy.tests.conftest import set_market_state, cleanup_patchers
 
 
 def test_calculate_dynamic_stoploss(stoploss_calculator, regime_detector):
@@ -14,70 +14,78 @@ def test_calculate_dynamic_stoploss(stoploss_calculator, regime_detector):
     stoploss_calculator.config.max_stoploss = -0.1
 
     # Test with a bullish regime
-    with patch.object(regime_detector, 'detect_regime', return_value="bullish"):
-        # In bullish regime: long is aligned, short is counter-trend
-        with patch.object(regime_detector, 'is_counter_trend', side_effect=lambda direction: direction == "short"), \
-                patch.object(regime_detector, 'is_aligned_trend', side_effect=lambda direction: direction == "long"):
+    bullish_patchers = set_market_state(regime_detector, "bullish", "long")
+    try:
+        # Test with various ROI values
+        roi_values = [0.04, 0.06, 0.08]
 
-            # Test with various ROI values
-            roi_values = [0.04, 0.06, 0.08]
+        for roi in roi_values:
+            # Calculate expected values
+            base_stoploss = -1 * roi * stoploss_calculator.config.risk_reward_ratio
+            expected_long_sl = base_stoploss * stoploss_calculator.config.aligned_trend_stoploss_factor
+            expected_short_sl = base_stoploss * stoploss_calculator.config.counter_trend_stoploss_factor
 
-            for roi in roi_values:
-                # Calculate expected values
-                base_stoploss = -1 * roi * stoploss_calculator.config.risk_reward_ratio
-                expected_long_sl = base_stoploss * stoploss_calculator.config.aligned_trend_stoploss_factor
-                expected_short_sl = base_stoploss * stoploss_calculator.config.counter_trend_stoploss_factor
+            # Apply correct clamping logic to match implementation
+            if expected_long_sl > stoploss_calculator.config.min_stoploss:
+                expected_long_sl = stoploss_calculator.config.min_stoploss
+            elif expected_long_sl < stoploss_calculator.config.max_stoploss:
+                expected_long_sl = stoploss_calculator.config.max_stoploss
 
-                # Apply correct clamping logic to match implementation
-                # For stoploss (negative values):
-                # -0.01 (min_stoploss) is the smallest loss allowed (closest to zero)
-                # -0.1 (max_stoploss) is the largest loss allowed (furthest from zero)
-                if expected_long_sl > stoploss_calculator.config.min_stoploss:
-                    # If stoploss is too small (closer to zero than min allows)
-                    expected_long_sl = stoploss_calculator.config.min_stoploss
-                elif expected_long_sl < stoploss_calculator.config.max_stoploss:
-                    # If stoploss is too large (further from zero than max allows)
-                    expected_long_sl = stoploss_calculator.config.max_stoploss
+            if expected_short_sl > stoploss_calculator.config.min_stoploss:
+                expected_short_sl = stoploss_calculator.config.min_stoploss
+            elif expected_short_sl < stoploss_calculator.config.max_stoploss:
+                expected_short_sl = stoploss_calculator.config.max_stoploss
 
-                if expected_short_sl > stoploss_calculator.config.min_stoploss:
-                    # If stoploss is too small (closer to zero than min allows)
-                    expected_short_sl = stoploss_calculator.config.min_stoploss
-                elif expected_short_sl < stoploss_calculator.config.max_stoploss:
-                    # If stoploss is too large (further from zero than max allows)
-                    expected_short_sl = stoploss_calculator.config.max_stoploss
-
-                # Test actual implementation
-                long_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "long")
-                short_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "short")
-
-                # Verify results (with small tolerance for floating point)
-                assert abs(long_sl - expected_long_sl) < 0.0001, f"Long SL: expected {expected_long_sl}, got {long_sl}"
-                assert abs(
-                    short_sl - expected_short_sl) < 0.0001, f"Short SL: expected {expected_short_sl}, got {short_sl}"
-
-                # Stoploss should be negative
-                assert long_sl < 0, f"Long stoploss should be negative, got {long_sl}"
-                assert short_sl < 0, f"Short stoploss should be negative, got {short_sl}"
-
-                # Check relative values - counter trend should be tighter (less negative)
-                # Only check this if both values aren't clamped to the same value
-                if expected_long_sl != expected_short_sl:
-                    assert short_sl > long_sl, f"Short SL ({short_sl}) should be > Long SL ({long_sl})"
-
-    # Test with a bearish regime
-    with patch.object(regime_detector, 'detect_regime', return_value="bearish"):
-        # In bearish regime: short is aligned, long is counter-trend
-        with patch.object(regime_detector, 'is_counter_trend', side_effect=lambda direction: direction == "long"), \
-                patch.object(regime_detector, 'is_aligned_trend', side_effect=lambda direction: direction == "short"):
-            # Test one value to verify behavior inverts
-            roi = 0.05
+            # Test actual implementation
             long_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "long")
             short_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "short")
 
-            # Now long should be counter-trend (tighter) and short should be aligned (wider)
-            # Only check if they're not clamped to the same value
-            if long_sl != short_sl:
-                assert long_sl > short_sl, f"With bearish regime, Long SL ({long_sl}) should be > Short SL ({short_sl})"
+            # Verify results
+            assert abs(long_sl - expected_long_sl) < 0.0001, f"Long SL: expected {expected_long_sl}, got {long_sl}"
+            assert abs(short_sl - expected_short_sl) < 0.0001, f"Short SL: expected {expected_short_sl}, got {short_sl}"
+
+            # Check relative values - counter trend should be tighter (less negative)
+            if expected_long_sl != expected_short_sl:
+                assert short_sl > long_sl, f"Short SL ({short_sl}) should be > Long SL ({long_sl})"
+    finally:
+        cleanup_patchers(bullish_patchers)
+
+    # Test with a bearish regime
+    bearish_patchers = set_market_state(regime_detector, "bearish", "short")
+    try:
+        # Test one value to verify behavior inverts
+        roi = 0.05
+        long_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "long")
+        short_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "short")
+
+        # Now long should be counter-trend (tighter) and short should be aligned (wider)
+        # Only check if they're not clamped to the same value
+        if long_sl != short_sl:
+            assert long_sl > short_sl, f"With bearish regime, Long SL ({long_sl}) should be > Short SL ({short_sl})"
+    finally:
+        cleanup_patchers(bearish_patchers)
+
+    # Test with a neutral regime
+    neutral_patchers = set_market_state(regime_detector, "neutral", None)
+    try:
+        roi = 0.05
+        long_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "long")
+        short_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "short")
+
+        # In neutral regime, no adjustment for trend alignment
+        expected_sl = -1 * roi * stoploss_calculator.config.risk_reward_ratio
+
+        # Apply clamping if needed
+        if expected_sl > stoploss_calculator.config.min_stoploss:
+            expected_sl = stoploss_calculator.config.min_stoploss
+        elif expected_sl < stoploss_calculator.config.max_stoploss:
+            expected_sl = stoploss_calculator.config.max_stoploss
+
+        # Both directions should have the same stoploss
+        assert abs(long_sl - expected_sl) < 0.0001, f"Long SL: expected {expected_sl}, got {long_sl}"
+        assert abs(short_sl - expected_sl) < 0.0001, f"Short SL: expected {expected_sl}, got {short_sl}"
+    finally:
+        cleanup_patchers(neutral_patchers)
 
 
 def test_calculate_stoploss_price(stoploss_calculator):

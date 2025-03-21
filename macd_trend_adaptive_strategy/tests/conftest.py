@@ -200,3 +200,88 @@ def mock_short_trade():
     # Add leverage attribute for testing
     trade.leverage = 1.0
     return trade
+
+
+@pytest.fixture
+def bullish_market(regime_detector):
+    """Fixture that sets up a bullish market regime with appropriate trend alignment"""
+    with patch.object(regime_detector, 'detect_regime', return_value="bullish") as detect_mock:
+        with patch.object(regime_detector, 'is_counter_trend',
+                         side_effect=lambda direction: direction == "short") as counter_mock:
+            with patch.object(regime_detector, 'is_aligned_trend',
+                             side_effect=lambda direction: direction == "long") as aligned_mock:
+                yield {
+                    'detect_regime': detect_mock,
+                    'is_counter_trend': counter_mock,
+                    'is_aligned_trend': aligned_mock
+                }
+
+
+@pytest.fixture
+def bearish_market(regime_detector):
+    """Fixture that sets up a bearish market regime with appropriate trend alignment"""
+    with patch.object(regime_detector, 'detect_regime', return_value="bearish") as detect_mock:
+        with patch.object(regime_detector, 'is_counter_trend',
+                         side_effect=lambda direction: direction == "long") as counter_mock:
+            with patch.object(regime_detector, 'is_aligned_trend',
+                             side_effect=lambda direction: direction == "short") as aligned_mock:
+                yield {
+                    'detect_regime': detect_mock,
+                    'is_counter_trend': counter_mock,
+                    'is_aligned_trend': aligned_mock
+                }
+
+
+@pytest.fixture
+def neutral_market(regime_detector):
+    """Fixture that sets up a neutral market regime"""
+    with patch.object(regime_detector, 'detect_regime', return_value="neutral") as detect_mock:
+        with patch.object(regime_detector, 'is_counter_trend', return_value=False) as counter_mock:
+            with patch.object(regime_detector, 'is_aligned_trend', return_value=False) as aligned_mock:
+                yield {
+                    'detect_regime': detect_mock,
+                    'is_counter_trend': counter_mock,
+                    'is_aligned_trend': aligned_mock
+                }
+
+
+def set_market_state(regime_detector, regime, aligned_direction=None):
+    """Helper function to set market state with specific regime and alignment
+
+    Args:
+        regime_detector: RegimeDetector to patch
+        regime: "bullish", "bearish", or "neutral"
+        aligned_direction: Direction ("long" or "short") that aligns with the trend, or None for neutral
+
+    Returns:
+        Dictionary of patchers that should be stopped after use
+    """
+    patchers = {}
+    patchers['detect_regime'] = patch.object(regime_detector, 'detect_regime', return_value=regime)
+    detect_mock = patchers['detect_regime'].start()
+
+    if aligned_direction:
+        # Set counter_trend for the opposite direction of aligned_direction
+        counter_trend_side_effect = lambda direction: direction != aligned_direction
+        aligned_trend_side_effect = lambda direction: direction == aligned_direction
+    else:
+        # For neutral market, nothing is counter or aligned
+        counter_trend_side_effect = lambda direction: False
+        aligned_trend_side_effect = lambda direction: False
+
+    patchers['is_counter_trend'] = patch.object(
+        regime_detector, 'is_counter_trend', side_effect=counter_trend_side_effect)
+    patchers['is_aligned_trend'] = patch.object(
+        regime_detector, 'is_aligned_trend', side_effect=aligned_trend_side_effect)
+
+    counter_mock = patchers['is_counter_trend'].start()
+    aligned_mock = patchers['is_aligned_trend'].start()
+
+    return patchers
+
+
+# Helper to clean up patchers
+def cleanup_patchers(patchers):
+    """Cleanup patchers by stopping them all"""
+    for patcher in patchers.values():
+        patcher.stop()

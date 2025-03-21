@@ -1,6 +1,8 @@
 from datetime import datetime
 from unittest.mock import patch
 
+from macd_trend_adaptive_strategy.tests.conftest import cleanup_patchers, set_market_state
+
 
 def test_calculate_adaptive_roi(roi_calculator, performance_tracker):
     """Test that adaptive ROI is calculated based on win rates"""
@@ -46,44 +48,62 @@ def test_get_trade_roi(roi_calculator, regime_detector):
     roi_calculator.config.aligned_trend_factor = 1.5
 
     # Test with bullish regime
-    with patch.object(regime_detector, 'detect_regime', return_value="bullish"):
-        # In bullish regime: long is aligned, short is counter
-        with patch.object(regime_detector, 'is_counter_trend', side_effect=lambda direction: direction == "short"), \
-                patch.object(regime_detector, 'is_aligned_trend', side_effect=lambda direction: direction == "long"):
-            # Call the actual implementation
-            long_roi = roi_calculator.get_trade_roi("long")
-            short_roi = roi_calculator.get_trade_roi("short")
+    bullish_patchers = set_market_state(regime_detector, "bullish", "long")
+    try:
+        # Call the actual implementation
+        long_roi = roi_calculator.get_trade_roi("long")
+        short_roi = roi_calculator.get_trade_roi("short")
 
-            # Check expected results
-            # Long is aligned: 0.05 * 1.5 = 0.075
-            expected_long_roi = 0.05 * 1.5
-            # Short is counter: 0.04 * 0.5 = 0.02
-            expected_short_roi = 0.04 * 0.5
+        # Check expected results
+        # Long is aligned: 0.05 * 1.5 = 0.075
+        expected_long_roi = 0.05 * 1.5
+        # Short is counter: 0.04 * 0.5 = 0.02
+        expected_short_roi = 0.04 * 0.5
 
-            assert abs(long_roi - expected_long_roi) < 0.0001, \
-                f"Expected aligned long ROI {expected_long_roi}, got {long_roi}"
-            assert abs(short_roi - expected_short_roi) < 0.0001, \
-                f"Expected counter short ROI {expected_short_roi}, got {short_roi}"
+        assert abs(long_roi - expected_long_roi) < 0.0001, \
+            f"Expected aligned long ROI {expected_long_roi}, got {long_roi}"
+        assert abs(short_roi - expected_short_roi) < 0.0001, \
+            f"Expected counter short ROI {expected_short_roi}, got {short_roi}"
+    finally:
+        cleanup_patchers(bullish_patchers)
 
     # Test with bearish regime
-    with patch.object(regime_detector, 'detect_regime', return_value="bearish"):
-        # In bearish regime: short is aligned, long is counter
-        with patch.object(regime_detector, 'is_counter_trend', side_effect=lambda direction: direction == "long"), \
-                patch.object(regime_detector, 'is_aligned_trend', side_effect=lambda direction: direction == "short"):
-            # Call the actual implementation again
-            long_roi = roi_calculator.get_trade_roi("long")
-            short_roi = roi_calculator.get_trade_roi("short")
+    bearish_patchers = set_market_state(regime_detector, "bearish", "short")
+    try:
+        # Call the actual implementation again
+        long_roi = roi_calculator.get_trade_roi("long")
+        short_roi = roi_calculator.get_trade_roi("short")
 
-            # Check expected results are inverted
-            # Long is now counter: 0.05 * 0.5 = 0.025
-            expected_long_roi = 0.05 * 0.5
-            # Short is now aligned: 0.04 * 1.5 = 0.06
-            expected_short_roi = 0.04 * 1.5
+        # Check expected results are inverted
+        # Long is now counter: 0.05 * 0.5 = 0.025
+        expected_long_roi = 0.05 * 0.5
+        # Short is now aligned: 0.04 * 1.5 = 0.06
+        expected_short_roi = 0.04 * 1.5
 
-            assert abs(long_roi - expected_long_roi) < 0.0001, \
-                f"Expected counter long ROI {expected_long_roi}, got {long_roi}"
-            assert abs(short_roi - expected_short_roi) < 0.0001, \
-                f"Expected aligned short ROI {expected_short_roi}, got {short_roi}"
+        assert abs(long_roi - expected_long_roi) < 0.0001, \
+            f"Expected counter long ROI {expected_long_roi}, got {long_roi}"
+        assert abs(short_roi - expected_short_roi) < 0.0001, \
+            f"Expected aligned short ROI {expected_short_roi}, got {short_roi}"
+    finally:
+        cleanup_patchers(bearish_patchers)
+
+    # Test with neutral regime
+    neutral_patchers = set_market_state(regime_detector, "neutral", None)
+    try:
+        # Call the actual implementation
+        long_roi = roi_calculator.get_trade_roi("long")
+        short_roi = roi_calculator.get_trade_roi("short")
+
+        # In neutral regime, no factors are applied
+        expected_long_roi = 0.05  # Base ROI
+        expected_short_roi = 0.04  # Base ROI
+
+        assert abs(long_roi - expected_long_roi) < 0.0001, \
+            f"Expected neutral long ROI {expected_long_roi}, got {long_roi}"
+        assert abs(short_roi - expected_short_roi) < 0.0001, \
+            f"Expected neutral short ROI {expected_short_roi}, got {short_roi}"
+    finally:
+        cleanup_patchers(neutral_patchers)
 
 
 def test_update_roi_cache(roi_calculator, performance_tracker):
