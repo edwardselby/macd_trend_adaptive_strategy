@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [unreleased] - 2025-03-21
+
+### Removed
+- Remove default config, now requires configuration file
+- Remove long_roi_boost
+
+### Changed
+- Refactored, simplified and expanded integration tests
+
 ## [0.2.0] - 2025-03-19
 
 ### Added
