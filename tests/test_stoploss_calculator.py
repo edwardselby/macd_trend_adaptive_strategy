@@ -1,4 +1,4 @@
-from macd_trend_adaptive_strategy.tests.conftest import set_market_state, cleanup_patchers
+from tests.conftest import set_market_state, cleanup_patchers
 
 
 def test_calculate_dynamic_stoploss(stoploss_calculator, regime_detector):

@@ -1,11 +1,11 @@
-import pytest
-from unittest.mock import MagicMock
 import json
-import tempfile
 import os
+import tempfile
 
-from macd_trend_adaptive_strategy.config.config_validator import ConfigValidator
-from macd_trend_adaptive_strategy.config.strategy_config import StrategyConfig, StrategyMode
+import pytest
+
+from config.config_validator import ConfigValidator
+from config.strategy_config import StrategyConfig, StrategyMode
 
 
 class TestConfigValidator:

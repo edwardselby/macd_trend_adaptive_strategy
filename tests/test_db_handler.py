@@ -2,7 +2,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from macd_trend_adaptive_strategy.performance.db_handler import DBHandler
+from performance.db_handler import DBHandler
 
 
 @pytest.fixture
@@ -207,7 +207,7 @@ def test_backtest_performance_clearing(mock_connect, mock_config):
 def test_backtest_optimization(mock_connect):
     """Test the in-memory caching and optimization for backtests"""
     from datetime import datetime, timedelta
-    from macd_trend_adaptive_strategy.performance.db_handler import DBHandler
+    from performance.db_handler import DBHandler
 
     # Create a backtest config
     backtest_config = {'user_data_dir': '/tmp', 'runmode': 'backtest'}

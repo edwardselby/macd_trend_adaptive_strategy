@@ -7,12 +7,12 @@ import pandas as pd
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 
-from macd_trend_adaptive_strategy.config.strategy_config import StrategyConfig, StrategyMode
-from macd_trend_adaptive_strategy.performance.tracker import PerformanceTracker
-from macd_trend_adaptive_strategy.regime.detector import RegimeDetector
-from macd_trend_adaptive_strategy.risk_management.roi_calculator import ROICalculator
-from macd_trend_adaptive_strategy.risk_management.stoploss_calculator import StoplossCalculator
-from macd_trend_adaptive_strategy.performance.db_handler import DBHandler
+from config.strategy_config import StrategyConfig, StrategyMode
+from performance.tracker import PerformanceTracker
+from regime.detector import RegimeDetector
+from risk_management.roi_calculator import ROICalculator
+from risk_management.stoploss_calculator import StoplossCalculator
+from performance.db_handler import DBHandler
 
 
 @pytest.fixture

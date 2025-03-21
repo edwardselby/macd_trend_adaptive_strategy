@@ -8,14 +8,14 @@ from freqtrade.enums.exittype import ExitType
 from freqtrade.persistence import Trade
 from freqtrade.strategy.interface import IStrategy, ExitCheckTuple
 
-from macd_trend_adaptive_strategy.config.strategy_config import StrategyConfig, StrategyMode
-from macd_trend_adaptive_strategy.indicators.technical import calculate_indicators, populate_entry_signals
-from macd_trend_adaptive_strategy.performance.db_handler import DBHandler
-from macd_trend_adaptive_strategy.performance.tracker import PerformanceTracker
-from macd_trend_adaptive_strategy.regime.detector import RegimeDetector
-from macd_trend_adaptive_strategy.risk_management.roi_calculator import ROICalculator
-from macd_trend_adaptive_strategy.risk_management.stoploss_calculator import StoplossCalculator
-from macd_trend_adaptive_strategy.utils import (
+from .config.strategy_config import StrategyConfig, StrategyMode
+from .indicators.technical import calculate_indicators, populate_entry_signals
+from .performance.db_handler import DBHandler
+from .performance.tracker import PerformanceTracker
+from .regime.detector import RegimeDetector
+from .risk_management.roi_calculator import ROICalculator
+from .risk_management.stoploss_calculator import StoplossCalculator
+from .utils import (
     get_direction, create_trade_id,
     log_new_trade, log_trade_exit, log_roi_exit,
     log_trade_cache_recreated, log_strategy_initialization, log_stoploss_hit,
@@ -78,7 +78,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         super().__init__(config)
 
         # Path to the configuration file
-        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config/strategy_config.json")
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strategy_config.json")
         if not os.path.exists(config_path):
             raise ValueError(
                 f"Configuration file not found at {config_path}. "

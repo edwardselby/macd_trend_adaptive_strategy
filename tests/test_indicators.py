@@ -1,4 +1,4 @@
-from macd_trend_adaptive_strategy.indicators import calculate_indicators, populate_entry_signals
+from indicators import calculate_indicators, populate_entry_signals
 
 
 def test_calculate_indicators(sample_dataframe, strategy_config):

@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Refactored, simplified and expanded integration tests
+- Restructured root directory for easier cloning
 
 ## [0.2.0] - 2025-03-19
 

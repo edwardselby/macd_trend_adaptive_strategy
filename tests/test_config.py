@@ -4,7 +4,7 @@ import tempfile
 import pytest
 from unittest.mock import patch, mock_open
 
-from macd_trend_adaptive_strategy.config.strategy_config import StrategyConfig, StrategyMode
+from config.strategy_config import StrategyConfig, StrategyMode
 
 
 def test_strategy_config_requires_config_file():

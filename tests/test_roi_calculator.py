@@ -1,7 +1,7 @@
 from datetime import datetime
 from unittest.mock import patch
 
-from macd_trend_adaptive_strategy.tests.conftest import cleanup_patchers, set_market_state
+from tests.conftest import cleanup_patchers, set_market_state
 
 
 def test_calculate_adaptive_roi(roi_calculator, performance_tracker):
