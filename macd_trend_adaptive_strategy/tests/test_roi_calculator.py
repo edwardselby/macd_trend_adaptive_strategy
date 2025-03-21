@@ -3,7 +3,7 @@ from datetime import datetime
 
 def test_calculate_adaptive_roi(roi_calculator):
     """Test that adaptive ROI is calculated correctly"""
-    # Use the same win rate for both directions to isolate the boost effect
+    # Use the same win rate for both directions to isolate the effect
     roi_calculator.performance_tracker.get_recent_win_rate = lambda direction: 0.6
 
     # Set min/max win rates to make normalization predictable
@@ -14,21 +14,21 @@ def test_calculate_adaptive_roi(roi_calculator):
     roi_calculator.config.min_roi = 0.05
     roi_calculator.config.max_roi = 0.10
 
-    # Set a specific boost value
-    roi_calculator.config.long_roi_boost = 0.02
-
     # Test ROI calculation for long
     long_roi = roi_calculator._calculate_adaptive_roi("long")
 
     # Test ROI calculation for short
     short_roi = roi_calculator._calculate_adaptive_roi("short")
 
-    # With the same win rate, the only difference should be the boost
+    # With the same win rate, the ROI values should be the same
     assert short_roi >= roi_calculator.config.min_roi
-    assert long_roi > short_roi
+    assert long_roi == short_roi
 
-    # Long ROI should be exactly the boost amount higher than short ROI
-    assert abs((long_roi - short_roi) - roi_calculator.config.long_roi_boost) < 0.001
+    # Calculate expected ROI based on win rate
+    # Win rate 0.6 is 50% between min_win_rate (0.4) and max_win_rate (0.8)
+    # So ROI should be 50% between min_roi (0.05) and max_roi (0.10) = 0.075
+    expected_roi = roi_calculator.config.min_roi + 0.5 * (roi_calculator.config.max_roi - roi_calculator.config.min_roi)
+    assert abs(long_roi - expected_roi) < 0.001
 
 
 def test_get_trade_roi(roi_calculator, regime_detector):

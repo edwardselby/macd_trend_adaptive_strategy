@@ -378,8 +378,6 @@ class StrategyConfig:
             self.max_recent_trades = 10
 
         # Other settings
-        if not hasattr(self, 'long_roi_boost'):
-            self.long_roi_boost = 0.0
         if not hasattr(self, 'use_dynamic_stoploss'):
             self.use_dynamic_stoploss = True
 

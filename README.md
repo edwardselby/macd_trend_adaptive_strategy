@@ -82,13 +82,7 @@ The ROI calculation follows this process:
    adaptive_roi = self.config.min_roi + normalized_wr * (self.config.max_roi - self.config.min_roi)
    ```
 
-2. **Direction-specific adjustment**: Apply boost for long trades if configured
-   ```python
-   if direction == 'long' and self.config.long_roi_boost > 0:
-       adaptive_roi += self.config.long_roi_boost
-   ```
-
-3. **Regime-based adjustment**: Apply multipliers based on trend alignment
+2. **Regime-based adjustment**: Apply multipliers based on trend alignment
    ```python
    if is_counter_trend:
        factor = self.config.counter_trend_factor
@@ -99,7 +93,6 @@ The ROI calculation follows this process:
    ```
 
 This system ensures that ROI targets adapt to both recent performance and market conditions, with counter-trend trades taking profits earlier (lower ROI) and trend-aligned trades allowing for larger profits (higher ROI).
-
 ### 4. Dynamic Stoploss Calculation
 
 The strategy implements a fully dynamic stoploss system that adapts to:
@@ -297,7 +290,6 @@ The strategy configuration includes the following parameter categories:
 | `counter_trend_stoploss_factor` | Factor applied to stoploss for counter-trend trades (lower = tighter stoploss) | 0.6 |
 | `aligned_trend_stoploss_factor` | Factor applied to stoploss for trend-aligned trades | 1.2 |
 | `use_dynamic_stoploss` | Enable/disable dynamic stoploss calculation | true |
-| `long_roi_boost` | Additional ROI percentage to add to long trades | 0.008 |
 
 #### Market Regime Parameters
 
@@ -429,6 +421,9 @@ Performance data is saved to the FreqTrade database for persistence between bot 
 ### Issue: Frequent stoploss hits
 - Adjust `risk_reward_ratio` to allow wider stoplosses
 - Increase `counter_trend_stoploss_factor` to give counter-trend trades more room
+
+## TODO:
+
 
 ## Contributing
 

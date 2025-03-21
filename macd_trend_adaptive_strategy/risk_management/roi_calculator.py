@@ -56,10 +56,6 @@ class ROICalculator:
         adaptive_roi = self.config.min_roi + normalized_wr * (
                 self.config.max_roi - self.config.min_roi)
 
-        # Apply direction-specific boost if configured
-        if direction == 'long' and self.config.long_roi_boost > 0:
-            adaptive_roi += self.config.long_roi_boost
-
         # Ensure ROI stays within bounds
         return max(self.config.min_roi, min(self.config.max_roi, adaptive_roi))
 
