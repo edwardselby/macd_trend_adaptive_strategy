@@ -1,8 +1,8 @@
 import logging
 from typing import Literal
 
-from ..performance import PerformanceTracker
-from ..utils import log_regime_detection
+from performance import PerformanceTracker
+from utils import log_regime_detection
 
 logger = logging.getLogger(__name__)
 
