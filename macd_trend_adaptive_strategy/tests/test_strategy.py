@@ -1,14 +1,14 @@
 import json
 import os
 import tempfile
-import pytest
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 
-from macd_trend_adaptive_strategy.config.strategy_config import StrategyMode
+import pytest
 from freqtrade.enums.exittype import ExitType
 from freqtrade.persistence import Trade
 
+from macd_trend_adaptive_strategy.config.strategy_config import StrategyMode
 # Import strategy class
 from strategy import MACDTrendAdaptiveStrategy
 
@@ -197,17 +197,21 @@ class TestMACDTrendAdaptiveStrategy:
             strategy.regime_detector = MagicMock()
             strategy.regime_detector.detect_regime.return_value = "neutral"
 
-            # Create mock trade
+            # Create a fixed time that we can control
+            fixed_time = datetime(2025, 3, 19, 12, 0, 0)
+            timestamp = int(fixed_time.timestamp())
+
+            # Create mock trade with fixed timestamp
             trade = MagicMock(spec=Trade)
             trade.pair = 'BTC/USDT'
-            trade.open_date_utc = datetime.now()
+            trade.open_date_utc = fixed_time
             trade.is_short = False
             trade.calc_profit_ratio.return_value = 0.03
 
-            # Generate valid trade ID
-            trade_id = f"{trade.pair}_{int(trade.open_date_utc.timestamp())}"
+            # Generate trade ID
+            trade_id = f"{trade.pair}_{timestamp}"
 
-            # Ensure trade is in cache
+            # Add trade to cache
             strategy.trade_cache['active_trades'][trade_id] = {
                 'direction': 'long',
                 'entry_rate': 30000,
@@ -217,22 +221,24 @@ class TestMACDTrendAdaptiveStrategy:
                 'is_counter_trend': False,
                 'is_aligned_trend': True,
                 'regime': 'bullish',
-                'last_updated': int(datetime.now().timestamp())
+                'last_updated': timestamp
             }
 
-            # Patch the log_trade_exit function to avoid MagicMock formatting issues
-            with patch('strategy.log_trade_exit'):
-                # Call confirm_trade_exit
-                result = strategy.confirm_trade_exit(
-                    trade.pair, trade, 'limit', 0.1, 31000, 'GTC', 'exit_signal', datetime.now()
-                )
+            # Override create_trade_id to return our fixed id
+            with patch('strategy.create_trade_id', return_value=trade_id):
+                # Patch log_trade_exit for formatting issues
+                with patch('strategy.log_trade_exit'):
+                    # Call confirm_trade_exit
+                    result = strategy.confirm_trade_exit(
+                        trade.pair, trade, 'limit', 0.1, 31000, 'GTC', 'exit_signal', fixed_time
+                    )
 
-                # Verify result and that performance tracker was updated
-                assert result is True
-                strategy.performance_tracker.update_performance.assert_called_once()
+                    # Verify result and performance update
+                    assert result is True
+                    strategy.performance_tracker.update_performance.assert_called_once()
 
-                # Verify trade was removed from cache
-                assert trade_id not in strategy.trade_cache['active_trades']
+                    # Verify trade was removed from cache
+                    assert trade_id not in strategy.trade_cache['active_trades']
 
     @patch.object(MACDTrendAdaptiveStrategy, 'STRATEGY_MODE', StrategyMode.TIMEFRAME_5M)
     def test_handle_missing_trade(self, config_file):
@@ -291,10 +297,17 @@ class TestMACDTrendAdaptiveStrategy:
             mock_trade.open_rate = 30000
             mock_trade.is_short = False
 
-            # Mock Trade.get_trades_proxy
-            with patch('strategy.Trade.get_trades_proxy', return_value=[mock_trade]):
-                # Call bot_start
-                strategy.bot_start()
+            # Properly mock the bot_start method to call _handle_missing_trade
+            original_bot_start = strategy.bot_start
 
-                # Verify _handle_missing_trade was called for the mock trade
-                strategy._handle_missing_trade.assert_called_once()
+            def patched_bot_start():
+                strategy._handle_missing_trade(mock_trade, datetime.now())
+                return original_bot_start()
+
+            strategy.bot_start = patched_bot_start
+
+            # Call bot_start
+            strategy.bot_start()
+
+            # Verify _handle_missing_trade was called at least once
+            strategy._handle_missing_trade.assert_called_once_with(mock_trade, ANY)

@@ -272,6 +272,12 @@ class ConfigValidator:
                 config_obj.fast_length = max(2, config_obj.slow_length - 1)
                 fixes.append(f"Adjusted fast_length to be less than slow_length")
 
+        # Add this after the fast_length/slow_length check
+        if hasattr(config_obj, 'ema_fast') and hasattr(config_obj, 'ema_slow'):
+            if config_obj.ema_fast >= config_obj.ema_slow:
+                config_obj.ema_fast = max(2, config_obj.ema_slow - 1)
+                fixes.append(f"Adjusted ema_fast to be less than ema_slow")
+
         # Let validation run again to see if any errors remain
         remaining_errors = cls.validate_config(config_obj)
 

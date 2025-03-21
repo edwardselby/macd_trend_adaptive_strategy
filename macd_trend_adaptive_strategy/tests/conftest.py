@@ -128,15 +128,19 @@ def performance_tracker(db_handler):
 
     return tracker
 
+
 @pytest.fixture
 def regime_detector(performance_tracker, strategy_config):
     """Create a RegimeDetector for testing"""
     detector = MagicMock(spec=RegimeDetector)
 
-    # Mock methods
+    # Add missing config attribute
+    detector.config = strategy_config
+
+    # Mock methods with proper return values
     detector.detect_regime = MagicMock(return_value='neutral')
-    detector.is_counter_trend = MagicMock(return_value=False)
-    detector.is_aligned_trend = MagicMock(return_value=True)
+    detector.is_counter_trend = MagicMock(side_effect=lambda direction: direction == "short")
+    detector.is_aligned_trend = MagicMock(side_effect=lambda direction: direction == "long")
 
     return detector
 
@@ -146,9 +150,16 @@ def roi_calculator(performance_tracker, regime_detector, strategy_config):
     """Create a ROICalculator for testing"""
     calculator = MagicMock(spec=ROICalculator)
 
-    # Mock methods
+    # Add missing attributes
+    calculator.performance_tracker = performance_tracker
+    calculator.config = strategy_config
+    calculator.roi_cache = {'long': 0.03, 'short': 0.02, 'last_updated': 0}
+
+    # Mock methods with proper return values
     calculator.update_roi_cache = MagicMock()
-    calculator.get_trade_roi = MagicMock(return_value=0.03)
+    calculator._calculate_adaptive_roi = MagicMock(return_value=0.045)
+    calculator.get_trade_roi = MagicMock(side_effect=lambda direction:
+    0.03 if direction == 'long' else 0.02)
 
     return calculator
 
@@ -158,10 +169,15 @@ def stoploss_calculator(regime_detector, strategy_config):
     """Create a StoplossCalculator for testing"""
     calculator = MagicMock(spec=StoplossCalculator)
 
-    # Mock methods
+    # Add missing attributes
+    calculator.config = strategy_config
+
+    # Mock methods with proper return values
     calculator.calculate_dynamic_stoploss = MagicMock(return_value=-0.02)
-    calculator.calculate_stoploss_price = MagicMock(return_value=29400)  # For a 30000 entry price
-    calculator.calculate_fallback_stoploss_price = MagicMock(return_value=29400)
+    calculator.calculate_stoploss_price = MagicMock(side_effect=lambda entry, sl, is_short:
+    entry * (1 + sl) if not is_short else entry * (1 - sl))
+    calculator.calculate_fallback_stoploss_price = MagicMock(side_effect=lambda entry, sl, is_short:
+    entry * (1 + sl) if not is_short else entry * (1 - sl))
 
     return calculator
 
