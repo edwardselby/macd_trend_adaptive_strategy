@@ -29,14 +29,10 @@ logger.setLevel(logging.INFO)
 class MACDTrendAdaptiveStrategy(IStrategy):
     """
     Enhanced MACD Strategy with Trend Detection, Market Regime Detection,
-    Fully Adaptive ROI and Dynamic Stoploss - Simplified Configuration Version
+    Fully Adaptive ROI and Dynamic Stoploss - Configuration Required Version
 
-    This strategy uses just three configurable parameters:
-    - risk_reward_ratio (expressed as "1:2") - risk-to-reward ratio for calculating stoplosses
-    - min_roi (e.g., 0.02) - minimum target ROI
-    - max_roi (e.g., 0.05) - maximum target ROI
-
-    Configure the strategy by creating a file at: user_data/strategy_config.json
+    IMPORTANT: This strategy requires a configuration file to be set up at:
+    user_data/strategies/macd_trend_adaptive_strategy/config/strategy_config.json
 
     Core strategy logic:
     - Uses MACD crossovers filtered by trend indicators for entry signals
@@ -81,8 +77,15 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         """
         super().__init__(config)
 
-        # Use the strategy mode to load configuration
+        # Path to the configuration file
         config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config/strategy_config.json")
+        if not os.path.exists(config_path):
+            raise ValueError(
+                f"Configuration file not found at {config_path}. "
+                f"Please create a configuration file before using this strategy."
+            )
+
+        # Use the strategy mode to load configuration
         self.strategy_config = StrategyConfig(self.STRATEGY_MODE, config_path)
 
         # Simplify attribute setting
@@ -537,25 +540,3 @@ class MACDTrendAdaptiveStrategy(IStrategy):
                 'last_updated': int(current_time.timestamp()),
                 'error': f'Unexpected error: {str(outer_e)}'
             }
-
-    def bot_start(self) -> None:
-        """
-        Called at the start of the bot to handle any initialization tasks.
-        We'll use this to recover any existing trades from FreqTrade's state.
-        """
-        # Check if we need to recover trades from FreqTrade state
-        if not self.is_backtest:
-            logger.info("Strategy starting - checking for existing trades to recover")
-
-            # Always call get_trades_proxy even if no trades to meet test requirements
-            trades = Trade.get_trades_proxy(is_open=True)
-
-            if trades:
-                logger.info(f"Found {len(trades)} open trades to recover")
-                current_time = datetime.now()
-
-                # Recover each trade's parameters
-                for trade in trades:
-                    self._handle_missing_trade(trade, current_time)
-            else:
-                logger.info("No open trades found to recover")

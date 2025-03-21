@@ -83,117 +83,27 @@ class StrategyConfig:
        - Example: With ROI = 3% and ratio = 0.5 (1:2), stoploss = -1.5%
     """
 
-    # Default configurations for different timeframes
-    DEFAULT_TIMEFRAME_CONFIGS = {
-        # 1-minute default
-        '1m': {
-            'risk_reward_ratio': "1:1.5",
-            'min_roi': 0.015,
-            'max_roi': 0.035,
-            # MACD parameters
-            'fast_length': 6,
-            'slow_length': 14,
-            'signal_length': 4,
-            # Trend detection parameters
-            'adx_period': 8,
-            'adx_threshold': 15,
-            'ema_fast': 3,
-            'ema_slow': 10,
-            # Other settings
-            'startup_candle_count': 20,
-            'roi_cache_update_interval': 15,
-        },
-        # 5-minute default
-        '5m': {
-            'risk_reward_ratio': "1:2",
-            'min_roi': 0.02,
-            'max_roi': 0.045,
-            # MACD parameters
-            'fast_length': 8,
-            'slow_length': 21,
-            'signal_length': 6,
-            # Trend detection parameters
-            'adx_period': 10,
-            'adx_threshold': 18,
-            'ema_fast': 5,
-            'ema_slow': 15,
-            # Other settings
-            'startup_candle_count': 25,
-            'roi_cache_update_interval': 30,
-        },
-        # 15-minute default (standard)
-        '15m': {
-            'risk_reward_ratio': "1:2",
-            'min_roi': 0.025,
-            'max_roi': 0.055,
-            # MACD parameters
-            'fast_length': 12,
-            'slow_length': 26,
-            'signal_length': 9,
-            # Trend detection parameters
-            'adx_period': 14,
-            'adx_threshold': 20,
-            'ema_fast': 8,
-            'ema_slow': 21,
-            # Other settings
-            'startup_candle_count': 30,
-            'roi_cache_update_interval': 60,
-        },
-        # 30-minute default
-        '30m': {
-            'risk_reward_ratio': "1:2.5",
-            'min_roi': 0.03,
-            'max_roi': 0.065,
-            # MACD parameters
-            'fast_length': 14,
-            'slow_length': 30,
-            'signal_length': 10,
-            # Trend detection parameters
-            'adx_period': 18,
-            'adx_threshold': 22,
-            'ema_fast': 10,
-            'ema_slow': 26,
-            # Other settings
-            'startup_candle_count': 35,
-            'roi_cache_update_interval': 120,
-        },
-        # 1-hour default
-        '1h': {
-            'risk_reward_ratio': "1:3",
-            'min_roi': 0.035,
-            'max_roi': 0.075,
-            # MACD parameters
-            'fast_length': 16,
-            'slow_length': 32,
-            'signal_length': 12,
-            # Trend detection parameters
-            'adx_period': 20,
-            'adx_threshold': 25,
-            'ema_fast': 12,
-            'ema_slow': 34,
-            # Other settings
-            'startup_candle_count': 40,
-            'roi_cache_update_interval': 300,
-        }
-    }
-
     def __init__(self, mode: StrategyMode = StrategyMode.DEFAULT, config_path: str = None):
+        # Configuration file is now required
+        if not config_path or not os.path.exists(config_path):
+            raise ValueError(
+                f"Configuration file not found: {config_path}. A configuration file is required to use this strategy.")
+
         # Determine the timeframe based on selected mode
         self.timeframe = self._get_timeframe_from_mode(mode)
 
-        # Load default config for this timeframe
-        self._load_default_config(self.timeframe)
+        # Initialize basic placeholder attributes to avoid errors before loading
+        self._initialize_placeholder_attributes()
 
-        # Override with user config if provided
-        config_loaded = self._load_user_config(config_path)
+        # Load configuration
+        self._load_user_config(config_path)
 
-        # Only run validation if a custom config was loaded or we're using defaults
+        # Validate and fix configuration
         errors, fixes = ConfigValidator.validate_and_fix(self)
 
-        # Only log validation errors if we loaded a config
-        if config_loaded and errors:
+        if errors:
             logger.warning(f"Configuration validation errors: {errors}")
-        elif fixes:
+        if fixes:
             logger.info(f"Configuration fixes applied: {fixes}")
 
         # Parse risk:reward ratio and calculate derived parameters
@@ -202,6 +112,32 @@ class StrategyConfig:
 
         # Log configuration summary
         logger.info(self.get_config_summary())
+
+    def _initialize_placeholder_attributes(self):
+        """Initialize placeholder attributes to avoid attribute errors"""
+        # Risk factor settings with defaults
+        self.counter_trend_factor = 0.5
+        self.aligned_trend_factor = 1.0
+        self.counter_trend_stoploss_factor = 0.5
+        self.aligned_trend_stoploss_factor = 1.0
+
+        # Win rate settings
+        self.min_win_rate = 0.2
+        self.max_win_rate = 0.8
+        self.regime_win_rate_diff = 0.2
+        self.min_recent_trades_per_direction = 5
+        self.max_recent_trades = 10
+
+        # Other settings
+        self.use_dynamic_stoploss = True
+        self.startup_candle_count = 30
+        self.roi_cache_update_interval = 60
+
+        # Core settings - these will be overridden by config
+        self.risk_reward_ratio = "1:2"
+        self.risk_reward_ratio_str = "1:2"
+        self.min_roi = 0.025
+        self.max_roi = 0.055
 
     def _get_timeframe_from_mode(self, mode: StrategyMode) -> str:
         """Convert strategy mode to timeframe string"""
@@ -219,37 +155,16 @@ class StrategyConfig:
             logger.warning(f"Unknown mode {mode}, defaulting to 15m")
             return '15m'
 
-    def _load_default_config(self, timeframe: str) -> None:
-        """
-        Load default configuration for the specified timeframe
-
-        Args:
-            timeframe: Trading timeframe ('1m', '5m', '15m', '30m', '1h')
-        """
-        if timeframe not in self.DEFAULT_TIMEFRAME_CONFIGS:
-            logger.warning(f"No default configuration for timeframe {timeframe}, using 15m defaults")
-            timeframe = '15m'
-
-        config = self.DEFAULT_TIMEFRAME_CONFIGS[timeframe]
-
-        # Load all configuration parameters
-        for key, value in config.items():
-            setattr(self, key, value)
-
-        # Store the timeframe
-        self.timeframe = timeframe
-
     def _load_user_config(self, config_path: str) -> bool:
         """
         Load user configuration from JSON file with support for timeframe-specific settings
 
         Args:
             config_path: Path to JSON configuration file
-        """
-        if not config_path or not os.path.exists(config_path):
-            logger.warning(f"Configuration file {config_path} not found, using defaults")
-            return False
 
+        Returns:
+            bool: True if configuration was loaded successfully
+        """
         try:
             with open(config_path, 'r') as f:
                 config = json.load(f)
@@ -273,10 +188,10 @@ class StrategyConfig:
                     self._set_config_value(key, value)
 
             # If no timeframe-specific or global section, check for top-level parameters
-            elif any(key for key in config if key not in self.DEFAULT_TIMEFRAME_CONFIGS):
+            elif any(key for key in config if key not in ['1m', '5m', '15m', '30m', '1h', 'global']):
                 # For backward compatibility, check for top-level parameters
                 for key, value in config.items():
-                    if key not in self.DEFAULT_TIMEFRAME_CONFIGS:  # Skip timeframe sections
+                    if key not in ['1m', '5m', '15m', '30m', '1h', 'global']:
                         self._set_config_value(key, value)
 
             logger.info(f"Loaded user configuration for {self.timeframe}")
@@ -284,8 +199,7 @@ class StrategyConfig:
 
         except Exception as e:
             logger.error(f"Error loading configuration from {config_path}: {e}")
-            logger.info(f"Using default configuration values for timeframe {self.timeframe}")
-            return False
+            raise ValueError(f"Failed to load configuration from {config_path}: {e}")
 
     def _set_config_value(self, key: str, value: Any) -> None:
         """
@@ -344,42 +258,12 @@ class StrategyConfig:
 
         # For backward compatibility with existing code
         # Make static_stoploss more negative than max_stoploss (20% more negative)
-        self.static_stoploss = self.max_stoploss * 1.2
+        if not hasattr(self, 'static_stoploss'):
+            self.static_stoploss = self.max_stoploss * 1.2
 
         # Make default_roi higher than max_roi (20% higher)
-        self.default_roi = self.max_roi * 1.2
-
-        # Set default values for parameters not in the config file
-        self._set_default_values()
-
-    def _set_default_values(self) -> None:
-        """Set default values for parameters not in the configuration file"""
-
-        # Risk factor settings with defaults
-        if not hasattr(self, 'counter_trend_factor'):
-            self.counter_trend_factor = 0.5
-        if not hasattr(self, 'aligned_trend_factor'):
-            self.aligned_trend_factor = 1.0
-        if not hasattr(self, 'counter_trend_stoploss_factor'):
-            self.counter_trend_stoploss_factor = 0.5
-        if not hasattr(self, 'aligned_trend_stoploss_factor'):
-            self.aligned_trend_stoploss_factor = 1.0
-
-        # Win rate settings
-        if not hasattr(self, 'min_win_rate'):
-            self.min_win_rate = 0.2
-        if not hasattr(self, 'max_win_rate'):
-            self.max_win_rate = 0.8
-        if not hasattr(self, 'regime_win_rate_diff'):
-            self.regime_win_rate_diff = 0.2
-        if not hasattr(self, 'min_recent_trades_per_direction'):
-            self.min_recent_trades_per_direction = 5
-        if not hasattr(self, 'max_recent_trades'):
-            self.max_recent_trades = 10
-
-        # Other settings
-        if not hasattr(self, 'use_dynamic_stoploss'):
-            self.use_dynamic_stoploss = True
+        if not hasattr(self, 'default_roi'):
+            self.default_roi = self.max_roi * 1.2
 
     def get_config_summary(self) -> str:
         """Get a summary of the configuration for logging"""
@@ -393,59 +277,3 @@ class StrategyConfig:
             f"- Factors: Counter={self.counter_trend_factor:.2f}, Aligned={self.aligned_trend_factor:.2f}, "
             f"Counter SL={self.counter_trend_stoploss_factor:.2f}, Aligned SL={self.aligned_trend_stoploss_factor:.2f}\n"
         )
-
-
-    @staticmethod
-    def generate_sample_config() -> Dict[str, Any]:
-        """
-        Generate a sample configuration file with settings for all timeframes
-
-        Returns:
-            dict: Sample configuration dictionary
-        """
-        # Start with the default timeframe configs
-        config = StrategyConfig.DEFAULT_TIMEFRAME_CONFIGS.copy()
-
-        # Only keep the essential parameters for simplicity
-        simplified_config = {}
-        for timeframe, settings in config.items():
-            simplified_config[timeframe] = {
-                "risk_reward_ratio": settings["risk_reward_ratio"],
-                "min_roi": settings["min_roi"],
-                "max_roi": settings["max_roi"],
-                # Add optional indicator parameters
-                "fast_length": settings["fast_length"],
-                "slow_length": settings["slow_length"],
-                "signal_length": settings["signal_length"],
-                "adx_period": settings["adx_period"],
-                "adx_threshold": settings["adx_threshold"],
-                "ema_fast": settings["ema_fast"],
-                "ema_slow": settings["ema_slow"]
-            }
-
-        # Add global settings section
-        simplified_config["global"] = {
-            "counter_trend_factor": 0.5,
-            "aligned_trend_factor": 1.0,
-            "counter_trend_stoploss_factor": 0.5,
-            "aligned_trend_stoploss_factor": 1.0,
-            "use_dynamic_stoploss": True
-        }
-
-        return simplified_config
-
-    @staticmethod
-    def save_sample_config(file_path: str) -> None:
-        """
-        Save a sample configuration file
-
-        Args:
-            file_path: Path to save the configuration file
-        """
-        try:
-            config = StrategyConfig.generate_sample_config()
-            with open(file_path, 'w') as f:
-                json.dump(config, f, indent=4)
-            logger.info(f"Sample configuration saved to {file_path}")
-        except Exception as e:
-            logger.error(f"Error saving sample configuration to {file_path}: {e}")

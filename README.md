@@ -197,7 +197,7 @@ To illustrate the adaptive nature of the strategy, consider these scenarios:
 
 By constantly adapting to market regimes and learning from trade performance, the strategy can optimize its parameters in real-time without manual intervention.
 
-## Installation
+# Installation
 
 ### Prerequisites
 
@@ -226,9 +226,21 @@ poetry install
 pip install -r requirements.txt
 ```
 
+3. **IMPORTANT**: Create a configuration file
+
+This strategy requires a configuration file to work properly. A sample configuration file is provided in the repository. You need to:
+
+```bash
+# Copy the sample config to the correct location
+cp config/sample_strategy_config.json config/strategy_config.json
+
+# Then edit the file to customize it for your needs
+nano config/strategy_config.json
+```
+
 ## Configuration
 
-The strategy can be configured via the `strategy_config.json` file. Different parameter sets are provided for various timeframes (1m, 5m, 15m, 30m, 1h).
+The strategy requires configuration via the `strategy_config.json` file. Different parameter sets should be provided for various timeframes (1m, 5m, 15m, 30m, 1h).
 
 ### Basic Configuration
 
@@ -247,6 +259,45 @@ You can choose which timeframe parameters to use by modifying the `STRATEGY_MODE
 # Change this to select a different parameter set
 STRATEGY_MODE = StrategyMode.TIMEFRAME_5M  # Options: TIMEFRAME_1M, TIMEFRAME_5M, TIMEFRAME_15M, TIMEFRAME_30M, TIMEFRAME_1H
 ```
+
+The strategy will use the corresponding section from your `strategy_config.json` file.
+
+### Configuration File Structure
+
+The `strategy_config.json` file should have the following structure:
+
+```json
+{
+    "1m": {
+        "risk_reward_ratio": "1:1.5",
+        "min_roi": 0.015,
+        "max_roi": 0.035,
+        ...
+    },
+    "5m": {
+        "risk_reward_ratio": "1:2",
+        "min_roi": 0.02,
+        "max_roi": 0.045,
+        ...
+    },
+    "15m": {
+        ...
+    },
+    "30m": {
+        ...
+    },
+    "1h": {
+        ...
+    },
+    "global": {
+        "counter_trend_factor": 0.5,
+        "aligned_trend_factor": 1.0,
+        ...
+    }
+}
+```
+
+Each timeframe section should contain parameters specific to that timeframe, while the "global" section contains parameters that apply to all timeframes.
 
 ### Configuration Parameters
 
