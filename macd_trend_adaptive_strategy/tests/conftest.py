@@ -89,9 +89,9 @@ def strategy_config(mock_config_file):
 @pytest.fixture
 def db_handler():
     """Create a mock DBHandler for testing"""
-    mock_db = MagicMock()  # Use MagicMock without spec to avoid attribute errors
+    mock_db = MagicMock(spec=DBHandler)
 
-    # Add required methods
+    # Set up default performance data for tests
     mock_db.load_performance_data.return_value = {
         'long': {'wins': 10, 'losses': 5, 'consecutive_wins': 2,
                  'consecutive_losses': 0, 'last_trades': [1, 0, 1, 1], 'total_profit': 0.8},
@@ -99,85 +99,49 @@ def db_handler():
                   'consecutive_losses': 1, 'last_trades': [0, 1, 0, 1], 'total_profit': 0.3}
     }
 
-    mock_db.save_performance_data = MagicMock()
-    mock_db.set_strategy_name = MagicMock()
-    mock_db.clear_performance_data = MagicMock()
-
     return mock_db
 
 
 @pytest.fixture
 def performance_tracker(db_handler):
-    """Create a PerformanceTracker for testing"""
-    tracker = MagicMock()
+    """Create a real PerformanceTracker with a mocked DB handler"""
+    tracker = PerformanceTracker(db_handler, max_recent_trades=5)
 
-    # Initialize performance tracking for testing
+    # Initialize with known data for predictable test results
     tracker.performance_tracking = {
-        'long': {'wins': 5, 'losses': 5, 'last_trades': [1, 0, 1, 1]},
-        'short': {'wins': 5, 'losses': 5, 'last_trades': [0, 1, 0, 1]}
+        'long': {'wins': 10, 'losses': 5, 'consecutive_wins': 2,
+                 'consecutive_losses': 0, 'last_trades': [1, 0, 1, 1], 'total_profit': 0.8},
+        'short': {'wins': 8, 'losses': 7, 'consecutive_wins': 0,
+                  'consecutive_losses': 1, 'last_trades': [0, 1, 0, 1], 'total_profit': 0.3}
     }
-
-    # Mock methods and ensure they return values that can be formatted
-    tracker.get_recent_win_rate = MagicMock(return_value=0.5)
-    tracker.get_recent_trades_count = MagicMock(return_value=4)
-    tracker.get_win_rate = MagicMock(return_value=0.5)
-
-    # Fix for the log_trade_exit formatting issue
-    tracker.update_performance = MagicMock()
-    tracker.log_performance_stats = MagicMock()
 
     return tracker
 
 
 @pytest.fixture
 def regime_detector(performance_tracker, strategy_config):
-    """Create a RegimeDetector for testing"""
-    detector = MagicMock(spec=RegimeDetector)
-
-    # Add missing config attribute
-    detector.config = strategy_config
-
-    # Mock methods with proper return values
-    detector.detect_regime = MagicMock(return_value='neutral')
-    detector.is_counter_trend = MagicMock(side_effect=lambda direction: direction == "short")
-    detector.is_aligned_trend = MagicMock(side_effect=lambda direction: direction == "long")
+    """Create a real RegimeDetector instance for testing"""
+    # Create a real RegimeDetector instance
+    detector = RegimeDetector(performance_tracker, strategy_config)
 
     return detector
 
 
 @pytest.fixture
 def roi_calculator(performance_tracker, regime_detector, strategy_config):
-    """Create a ROICalculator for testing"""
-    calculator = MagicMock(spec=ROICalculator)
+    """Create a real ROICalculator for testing"""
+    calculator = ROICalculator(performance_tracker, regime_detector, strategy_config)
 
-    # Add missing attributes
-    calculator.performance_tracker = performance_tracker
-    calculator.config = strategy_config
+    # Initialize roi_cache with known values for predictable tests
     calculator.roi_cache = {'long': 0.03, 'short': 0.02, 'last_updated': 0}
-
-    # Mock methods with proper return values
-    calculator.update_roi_cache = MagicMock()
-    calculator._calculate_adaptive_roi = MagicMock(return_value=0.045)
-    calculator.get_trade_roi = MagicMock(side_effect=lambda direction:
-    0.03 if direction == 'long' else 0.02)
 
     return calculator
 
 
 @pytest.fixture
 def stoploss_calculator(regime_detector, strategy_config):
-    """Create a StoplossCalculator for testing"""
-    calculator = MagicMock(spec=StoplossCalculator)
-
-    # Add missing attributes
-    calculator.config = strategy_config
-
-    # Mock methods with proper return values
-    calculator.calculate_dynamic_stoploss = MagicMock(return_value=-0.02)
-    calculator.calculate_stoploss_price = MagicMock(side_effect=lambda entry, sl, is_short:
-    entry * (1 + sl) if not is_short else entry * (1 - sl))
-    calculator.calculate_fallback_stoploss_price = MagicMock(side_effect=lambda entry, sl, is_short:
-    entry * (1 + sl) if not is_short else entry * (1 - sl))
+    """Create a real StoplossCalculator for testing"""
+    calculator = StoplossCalculator(regime_detector, strategy_config)
 
     return calculator
 

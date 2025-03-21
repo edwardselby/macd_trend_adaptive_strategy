@@ -1,81 +1,130 @@
 from datetime import datetime
-from unittest.mock import MagicMock
-
-from macd_trend_adaptive_strategy.risk_management import ROICalculator
+from unittest.mock import patch
 
 
-def test_calculate_adaptive_roi(roi_calculator):
-    """Test that adaptive ROI is calculated correctly"""
-    # Use the same win rate for both directions to isolate the effect
-    roi_calculator.performance_tracker.get_recent_win_rate = lambda direction: 0.6
-
-    # Set min/max win rates to make normalization predictable
-    roi_calculator.config.min_win_rate = 0.4
+def test_calculate_adaptive_roi(roi_calculator, performance_tracker):
+    """Test that adaptive ROI is calculated based on win rates"""
+    # Configure win rate boundaries
+    roi_calculator.config.min_win_rate = 0.2
     roi_calculator.config.max_win_rate = 0.8
 
-    # Set min/max ROI values
-    roi_calculator.config.min_roi = 0.025
-    roi_calculator.config.max_roi = 0.10
+    # Configure ROI boundaries
+    roi_calculator.config.min_roi = 0.03
+    roi_calculator.config.max_roi = 0.09
 
-    # Restore the original method (if it was mocked)
-    if hasattr(roi_calculator._calculate_adaptive_roi, 'reset_mock'):
-        roi_calculator._calculate_adaptive_roi = ROICalculator._calculate_adaptive_roi.__get__(roi_calculator)
+    # Test cases with different win rates
+    test_cases = [
+        {"win_rate": 0.2, "expected_roi": 0.03},  # Minimum win rate -> minimum ROI
+        {"win_rate": 0.8, "expected_roi": 0.09},  # Maximum win rate -> maximum ROI
+        {"win_rate": 0.5, "expected_roi": 0.06},  # Middle win rate -> middle ROI (linear scaling)
+        {"win_rate": 0.1, "expected_roi": 0.03},  # Below min win rate -> clamped to min ROI
+        {"win_rate": 0.9, "expected_roi": 0.09},  # Above max win rate -> clamped to max ROI
+    ]
 
-    # Test ROI calculation for long
-    long_roi = roi_calculator._calculate_adaptive_roi("long")
+    for case in test_cases:
+        # Patch performance_tracker.get_recent_win_rate to return our test win rate
+        with patch.object(performance_tracker, 'get_recent_win_rate', return_value=case["win_rate"]):
+            # Call the actual implementation we're testing
+            result = roi_calculator._calculate_adaptive_roi("long")  # Direction doesn't matter for this test
 
-    # Test ROI calculation for short
-    short_roi = roi_calculator._calculate_adaptive_roi("short")
-
-    # With the same win rate, the ROI values should be the same
-    assert long_roi == short_roi
-    assert roi_calculator.config.min_roi <= short_roi <= roi_calculator.config.max_roi
-
-    # Calculate expected ROI based on win rate
-    # Win rate 0.6 is 50% between min_win_rate (0.4) and max_win_rate (0.8)
-    # So ROI should be 50% between min_roi (0.025) and max_roi (0.10) = 0.0625
-    calc_expected_roi = roi_calculator.config.min_roi + 0.5 * (
-                roi_calculator.config.max_roi - roi_calculator.config.min_roi)
-    assert abs(long_roi - calc_expected_roi) < 0.001
+            # Verify result (with small tolerance for floating point)
+            assert abs(result - case["expected_roi"]) < 0.0001, \
+                f"With win rate {case['win_rate']}, expected ROI {case['expected_roi']}, got {result}"
 
 
 def test_get_trade_roi(roi_calculator, regime_detector):
-    """Test that trade-specific ROI considers trend alignment"""
-    # Force a bullish regime
-    regime_detector.detect_regime = lambda: "bullish"
+    """Test that trade-specific ROI applies correct factors based on regime"""
+    # Configure the ROI cache
+    roi_calculator.roi_cache = {
+        'long': 0.05,  # Base ROI for long
+        'short': 0.04,  # Base ROI for short
+        'last_updated': int(datetime.now().timestamp())
+    }
 
-    # Update cache with known values
-    roi_calculator.roi_cache = {'long': 0.03, 'short': 0.02, 'last_updated': int(datetime.now().timestamp())}
-
-    # Set the factor values
-    roi_calculator.config.aligned_trend_factor = 1.0
+    # Configure factors
     roi_calculator.config.counter_trend_factor = 0.5
+    roi_calculator.config.aligned_trend_factor = 1.5
 
-    # Create a real implementation for get_trade_roi
-    def real_get_trade_roi(direction):
-        base_roi = roi_calculator.roi_cache[direction]
-        if direction == 'long':  # Aligned with bullish
-            return base_roi * roi_calculator.config.aligned_trend_factor
-        else:  # Counter trend
-            return base_roi * roi_calculator.config.counter_trend_factor
+    # Test with bullish regime
+    with patch.object(regime_detector, 'detect_regime', return_value="bullish"):
+        # In bullish regime: long is aligned, short is counter
+        with patch.object(regime_detector, 'is_counter_trend', side_effect=lambda direction: direction == "short"), \
+                patch.object(regime_detector, 'is_aligned_trend', side_effect=lambda direction: direction == "long"):
+            # Call the actual implementation
+            long_roi = roi_calculator.get_trade_roi("long")
+            short_roi = roi_calculator.get_trade_roi("short")
 
-    # Use our implementation
-    roi_calculator.get_trade_roi = real_get_trade_roi
+            # Check expected results
+            # Long is aligned: 0.05 * 1.5 = 0.075
+            expected_long_roi = 0.05 * 1.5
+            # Short is counter: 0.04 * 0.5 = 0.02
+            expected_short_roi = 0.04 * 0.5
 
-    # Get ROI values
-    long_roi = roi_calculator.get_trade_roi("long")
-    short_roi = roi_calculator.get_trade_roi("short")
+            assert abs(long_roi - expected_long_roi) < 0.0001, \
+                f"Expected aligned long ROI {expected_long_roi}, got {long_roi}"
+            assert abs(short_roi - expected_short_roi) < 0.0001, \
+                f"Expected counter short ROI {expected_short_roi}, got {short_roi}"
 
-    # Counter trend ROI should be lower
-    assert short_roi < long_roi
+    # Test with bearish regime
+    with patch.object(regime_detector, 'detect_regime', return_value="bearish"):
+        # In bearish regime: short is aligned, long is counter
+        with patch.object(regime_detector, 'is_counter_trend', side_effect=lambda direction: direction == "long"), \
+                patch.object(regime_detector, 'is_aligned_trend', side_effect=lambda direction: direction == "short"):
+            # Call the actual implementation again
+            long_roi = roi_calculator.get_trade_roi("long")
+            short_roi = roi_calculator.get_trade_roi("short")
 
-    # Check exact calculations
-    assert long_roi == 0.03  # 0.03 * 1.0
-    assert short_roi == 0.01  # 0.02 * 0.5
+            # Check expected results are inverted
+            # Long is now counter: 0.05 * 0.5 = 0.025
+            expected_long_roi = 0.05 * 0.5
+            # Short is now aligned: 0.04 * 1.5 = 0.06
+            expected_short_roi = 0.04 * 1.5
 
-    # Or use smaller tolerance
-    expected_long_roi = roi_calculator.roi_cache["long"] * roi_calculator.config.aligned_trend_factor
-    expected_short_roi = roi_calculator.roi_cache["short"] * roi_calculator.config.counter_trend_factor
+            assert abs(long_roi - expected_long_roi) < 0.0001, \
+                f"Expected counter long ROI {expected_long_roi}, got {long_roi}"
+            assert abs(short_roi - expected_short_roi) < 0.0001, \
+                f"Expected aligned short ROI {expected_short_roi}, got {short_roi}"
 
-    assert abs(long_roi - expected_long_roi) < 0.0001
-    assert abs(short_roi - expected_short_roi) < 0.0001
+
+def test_update_roi_cache(roi_calculator, performance_tracker):
+    """Test that ROI cache is updated when needed"""
+    # Set up initial state
+    old_timestamp = 100  # Very old timestamp
+    roi_calculator.roi_cache = {
+        'long': 0.03,
+        'short': 0.03,
+        'last_updated': old_timestamp
+    }
+    roi_calculator.config.roi_cache_update_interval = 50  # Short interval for testing
+
+    # Mock _calculate_adaptive_roi to return controlled values
+    with patch.object(roi_calculator, '_calculate_adaptive_roi',
+                      side_effect=lambda direction: 0.045 if direction == "long" else 0.035):
+        # Current timestamp that will trigger an update (more than 50 seconds passed)
+        current_timestamp = old_timestamp + 60
+
+        # Call the method to update the cache
+        roi_calculator.update_roi_cache(current_timestamp)
+
+        # Verify cache was updated
+        assert roi_calculator.roi_cache['last_updated'] == current_timestamp, \
+            "Cache timestamp should be updated"
+        assert roi_calculator.roi_cache['long'] == 0.045, \
+            f"Long ROI should be updated to 0.045, got {roi_calculator.roi_cache['long']}"
+        assert roi_calculator.roi_cache['short'] == 0.035, \
+            f"Short ROI should be updated to 0.035, got {roi_calculator.roi_cache['short']}"
+
+        # Now test when update is not needed
+        previous_cache = roi_calculator.roi_cache.copy()  # Save current state
+        new_timestamp = current_timestamp + 10  # Not enough time passed
+
+        # Call update again
+        roi_calculator.update_roi_cache(new_timestamp)
+
+        # Verify cache was NOT updated
+        assert roi_calculator.roi_cache['last_updated'] == current_timestamp, \
+            "Cache timestamp should not change"
+        assert roi_calculator.roi_cache['long'] == previous_cache['long'], \
+            "Long ROI should not change"
+        assert roi_calculator.roi_cache['short'] == previous_cache['short'], \
+            "Short ROI should not change"

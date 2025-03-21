@@ -1,82 +1,96 @@
-from unittest.mock import MagicMock
-
-from macd_trend_adaptive_strategy.regime import RegimeDetector
+from unittest.mock import patch
 
 
 def test_detect_regime(regime_detector, performance_tracker):
-    """Test that market regime is correctly detected"""
-    # Ensure config values are set correctly for test
-    regime_detector.config.min_recent_trades_per_direction = 4
+    """Test that market regime is correctly detected based on win rates"""
+    # Configure threshold
     regime_detector.config.regime_win_rate_diff = 0.2
+    regime_detector.config.min_recent_trades_per_direction = 4
 
-    # With the mock data provided, we should detect a bullish regime
-    # Because long win rate (3/4 = 0.75) - short win rate (2/4 = 0.5) = 0.25 > threshold (0.2)
+    # Patch the methods in performance_tracker that get called by detect_regime
+    # This avoids testing the mock but instead tests how detect_regime uses these methods
 
-    # Override the mock return values for this test
-    regime_detector.detect_regime = MagicMock(return_value="bullish")
+    # Scenario 1: Bullish regime (long win rate significantly higher)
+    with patch.object(performance_tracker, 'get_recent_win_rate',
+                      side_effect=lambda direction: 0.75 if direction == "long" else 0.45):
+        with patch.object(performance_tracker, 'get_recent_trades_count', return_value=10):
+            # Call the actual implementation
+            regime = regime_detector.detect_regime()
 
-    regime = regime_detector.detect_regime()
-    assert regime in ["bullish", "bearish", "neutral"]
+            # Long win rate - short win rate = 0.3, which > 0.2 threshold
+            assert regime == "bullish", f"Expected bullish regime, got {regime}"
 
-    # We expect bullish with our mock data
-    assert regime == "bullish"
+    # Scenario 2: Bearish regime (short win rate significantly higher)
+    with patch.object(performance_tracker, 'get_recent_win_rate',
+                      side_effect=lambda direction: 0.4 if direction == "long" else 0.7):
+        with patch.object(performance_tracker, 'get_recent_trades_count', return_value=10):
+            # Call the actual implementation
+            regime = regime_detector.detect_regime()
 
-    # Test with not enough trades
-    # Simulate not enough trades by making get_recent_trades_count return a small value
-    original_get_count = performance_tracker.get_recent_trades_count
-    performance_tracker.get_recent_trades_count = MagicMock(return_value=2)  # Below threshold
+            # Short win rate - long win rate = 0.3, which > 0.2 threshold
+            assert regime == "bearish", f"Expected bearish regime, got {regime}"
 
-    # Reset detect_regime to use the original implementation for this test
-    regime_detector.detect_regime = RegimeDetector.detect_regime.__get__(regime_detector)
+    # Scenario 3: Neutral regime (win rates are close)
+    with patch.object(performance_tracker, 'get_recent_win_rate',
+                      side_effect=lambda direction: 0.55 if direction == "long" else 0.45):
+        with patch.object(performance_tracker, 'get_recent_trades_count', return_value=10):
+            # Call the actual implementation
+            regime = regime_detector.detect_regime()
 
-    # Mock performance tracker methods that would be called by original implementation
-    performance_tracker.get_recent_win_rate = MagicMock(
-        side_effect=lambda direction: 0.75 if direction == "long" else 0.5)
+            # Difference = 0.1, which < 0.2 threshold
+            assert regime == "neutral", f"Expected neutral regime, got {regime}"
 
-    # Create a fallback implementation to return "neutral" when not enough trades
-    def mock_detect():
-        long_trades = performance_tracker.get_recent_trades_count("long")
-        if long_trades < regime_detector.config.min_recent_trades_per_direction:
-            return "neutral"
-        return "bullish"  # Default for test
+    # Scenario 4: Not enough trades
+    with patch.object(performance_tracker, 'get_recent_win_rate',
+                      side_effect=lambda direction: 0.75 if direction == "long" else 0.45):
+        with patch.object(performance_tracker, 'get_recent_trades_count', return_value=2):
+            # Call the actual implementation
+            regime = regime_detector.detect_regime()
 
-    regime_detector.detect_regime = mock_detect
-
-    # Should return neutral when not enough trades
-    assert regime_detector.detect_regime() == "neutral"
-
-    # Restore original method
-    performance_tracker.get_recent_trades_count = original_get_count
+            # Should default to neutral when not enough trades
+            assert regime == "neutral", f"Expected neutral regime when not enough trades, got {regime}"
 
 
-def test_trend_alignment(regime_detector):
-    """Test the trend alignment detection methods"""
-    # Force a specific regime for testing
-    regime_detector.detect_regime = lambda: "bullish"
+def test_is_counter_trend(regime_detector):
+    """Test counter-trend detection logic"""
+    # Patch the detect_regime method to return controlled values
+    # This tests the actual is_counter_trend method against known regime values
 
-    # Ensure expected responses for is_counter_trend and is_aligned_trend
-    regime_detector.is_counter_trend.side_effect = lambda direction: direction == "short"
-    regime_detector.is_aligned_trend.side_effect = lambda direction: direction == "long"
+    # Test in bullish regime
+    with patch.object(regime_detector, 'detect_regime', return_value="bullish"):
+        # In bullish regime, short is counter-trend, long is not
+        assert regime_detector.is_counter_trend("short") == True
+        assert regime_detector.is_counter_trend("long") == False
 
-    # Test counter trend
-    assert regime_detector.is_counter_trend("short") == True
-    assert regime_detector.is_counter_trend("long") == False
+    # Test in bearish regime
+    with patch.object(regime_detector, 'detect_regime', return_value="bearish"):
+        # In bearish regime, long is counter-trend, short is not
+        assert regime_detector.is_counter_trend("long") == True
+        assert regime_detector.is_counter_trend("short") == False
 
-    # Test aligned trend
-    assert regime_detector.is_aligned_trend("long") == True
-    assert regime_detector.is_aligned_trend("short") == False
+    # Test in neutral regime
+    with patch.object(regime_detector, 'detect_regime', return_value="neutral"):
+        # In neutral regime, nothing is counter-trend
+        assert regime_detector.is_counter_trend("long") == False
+        assert regime_detector.is_counter_trend("short") == False
 
-    # Change the regime
-    regime_detector.detect_regime = lambda: "bearish"
 
-    # Update side effects for bearish regime
-    regime_detector.is_counter_trend.side_effect = lambda direction: direction == "long"
-    regime_detector.is_aligned_trend.side_effect = lambda direction: direction == "short"
+def test_is_aligned_trend(regime_detector):
+    """Test aligned-trend detection logic"""
+    # Test in bullish regime
+    with patch.object(regime_detector, 'detect_regime', return_value="bullish"):
+        # In bullish regime, long is aligned, short is not
+        assert regime_detector.is_aligned_trend("long") == True
+        assert regime_detector.is_aligned_trend("short") == False
 
-    # Test counter trend with bearish regime
-    assert regime_detector.is_counter_trend("long") == True
-    assert regime_detector.is_counter_trend("short") == False
+    # Test in bearish regime
+    with patch.object(regime_detector, 'detect_regime', return_value="bearish"):
+        # In bearish regime, short is aligned, long is not
+        assert regime_detector.is_aligned_trend("short") == True
+        assert regime_detector.is_aligned_trend("long") == False
 
-    # Test aligned trend with bearish regime
-    assert regime_detector.is_aligned_trend("short") == True
-    assert regime_detector.is_aligned_trend("long") == False
+    # Test in neutral regime
+    with patch.object(regime_detector, 'detect_regime', return_value="neutral"):
+        # In neutral regime, nothing is aligned
+        assert regime_detector.is_aligned_trend("long") == False
+        assert regime_detector.is_aligned_trend("short") == False
