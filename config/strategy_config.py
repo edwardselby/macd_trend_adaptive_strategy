@@ -4,7 +4,7 @@ import os
 from enum import Enum
 from typing import Any
 
-from config.config_validator import ConfigValidator
+from .config_validator import ConfigValidator
 
 logger = logging.getLogger(__name__)
 

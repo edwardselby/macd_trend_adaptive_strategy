@@ -127,7 +127,7 @@ def test_log_performance_stats(performance_tracker):
 
     # FIXED: Use the correct import path for patching
     # Based on the imports in tracker.py: from ..utils import log_performance_update, log_performance_summary
-    with patch('performance.tracker.log_performance_summary') as mock_log:
+    with patch('macd_trend_adaptive_strategy.performance.tracker.log_performance_summary') as mock_log:
         # Call the method
         performance_tracker.log_performance_stats()
 

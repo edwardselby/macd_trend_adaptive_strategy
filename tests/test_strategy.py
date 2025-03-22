@@ -225,9 +225,9 @@ def test_confirm_trade_exit(config_file):
     }
 
     # Override create_trade_id to return our fixed id
-    with patch('strategy.create_trade_id', return_value=trade_id):
+    with patch('macd_trend_adaptive_strategy.utils.create_trade_id', return_value=trade_id):
         # Patch log_trade_exit for formatting issues
-        with patch('strategy.log_trade_exit'):
+        with patch('macd_trend_adaptive_strategy.utils.log_trade_exit'):
             # Call confirm_trade_exit
             result = strategy.confirm_trade_exit(
                 trade.pair, trade, 'limit', 0.1, 31000, 'GTC', 'exit_signal', fixed_time
@@ -400,7 +400,7 @@ def test_should_exit_with_different_regimes(config_file):
             }
 
             # CRITICAL FIX: Patch create_trade_id to ensure it returns our exact trade_id
-            with patch('strategy.create_trade_id', return_value=trade_id):
+            with patch('macd_trend_adaptive_strategy.utils.create_trade_id', return_value=trade_id):
                 # Test ROI exit
                 # Use a profit that's just above the ROI target
                 profit_factor = 0.97 if scenario['is_short'] else 1.03  # 3% profit
