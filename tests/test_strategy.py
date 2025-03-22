@@ -11,7 +11,7 @@ from freqtrade.persistence import Trade
 
 from config.strategy_config import StrategyMode
 from tests.conftest import set_market_state, cleanup_patchers
-from strategy import MACDTrendAdaptiveStrategy
+from macd_trend_adaptive_strategy import MACDTrendAdaptiveStrategy
 
 
 # Move the fixture to module level
