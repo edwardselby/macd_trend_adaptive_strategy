@@ -45,11 +45,6 @@ class MACDTrendAdaptiveStrategy(IStrategy):
     # Version 3 API - required for proper leverage
     INTERFACE_VERSION = 3
 
-    # ===== CONFIGURABLE PARAMETER SET =====
-    # Change this to select a different parameter set
-    STRATEGY_MODE = StrategyMode.TIMEFRAME_5M
-    # =====================================
-
     # Futures and leverage settings
     can_short = True
     leverage_config = {"*": {"*": 10.0}}
@@ -85,8 +80,8 @@ class MACDTrendAdaptiveStrategy(IStrategy):
                 f"Please create a configuration file before using this strategy."
             )
 
-        # Use the strategy mode to load configuration
-        self.strategy_config = StrategyConfig(self.STRATEGY_MODE, config_path)
+        # Use freqtrade config to auto-detect strategy mode and load configuration
+        self.strategy_config = StrategyConfig(config_path=config_path, freqtrade_config=config)
 
         # Simplify attribute setting
         self.startup_candle_count = self.strategy_config.startup_candle_count
@@ -138,9 +133,14 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         # Use the already calculated default_roi as the minimal_roi
         self.minimal_roi = {"0": self.strategy_config.default_roi}
 
+        # Determine display mode for logging
+        display_mode = getattr(self.strategy_config, 'strategy_mode', 'auto')
+        if display_mode == 'auto':
+            display_mode = f"auto-detected ({self.timeframe})"
+
         # Logging initialization details
         log_strategy_initialization(
-            mode=self.STRATEGY_MODE,
+            mode=display_mode,
             timeframe=self.timeframe,
             indicators={
                 'fast': self.strategy_config.fast_length,
