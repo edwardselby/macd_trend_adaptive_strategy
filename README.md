@@ -208,6 +208,27 @@ By constantly adapting to market regimes and learning from trade performance, th
 
 ### Setup
 
+There are two ways to install this strategy:
+
+#### Option 1: Automatic Installation (Recommended)
+
+Use the included installation script to automatically set up the strategy in your FreqTrade environment:
+
+```bash
+# Navigate to the strategy repository
+cd macd_trend_adaptive_strategy
+
+# Run the setup script
+bash setup-strategy.sh
+```
+
+The script will:
+1. Copy the strategy to your FreqTrade strategies directory
+2. Set up Git hooks to automatically update the strategy when you pull changes
+3. Configure everything needed to use the strategy immediately
+
+#### Option 2: Manual Installation
+
 1. Clone this repository into your FreqTrade `user_data/strategies` folder:
 
 ```bash
