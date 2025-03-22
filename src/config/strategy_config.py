@@ -10,16 +10,14 @@ logger = logging.getLogger(__name__)
 
 
 class StrategyMode(str, Enum):
-    """
-    Strategy modes that determine the timeframe and associated indicator settings
-    """
-    DEFAULT = "default"  # Default configuration (15m timeframe)
-    TIMEFRAME_1M = "1m"  # Optimized for 1-minute timeframe
-    TIMEFRAME_5M = "5m"  # Optimized for 5-minute timeframe
-    TIMEFRAME_15M = "15m"  # Optimized for 15-minute timeframe (same as DEFAULT)
-    TIMEFRAME_30M = "30m"  # Optimized for 30-minute timeframe
-    TIMEFRAME_1H = "1h"  # Optimized for 1-hour timeframe
-    AUTO = "auto"  # Auto-detect from FreqTrade configuration
+    """Strategy modes that directly use timeframe strings as values"""
+    DEFAULT = "15m"  # Default is 15m
+    TIMEFRAME_1M = "1m"
+    TIMEFRAME_5M = "5m"
+    TIMEFRAME_15M = "15m"
+    TIMEFRAME_30M = "30m"
+    TIMEFRAME_1H = "1h"
+    AUTO = "auto"
 
 
 class StrategyConfig:
@@ -85,20 +83,32 @@ class StrategyConfig:
     """
 
     def __init__(self, mode: 'StrategyMode' = None, config_path: str = None, freqtrade_config: dict = None):
-        # If freqtrade_config is provided, auto-detect mode
-        if freqtrade_config is not None and mode is None:
-            self.timeframe = self.detect_strategy_mode(freqtrade_config)
-        elif mode is None:
-            # Default to 15m if no mode specified and no freqtrade_config
-            self.timeframe = StrategyMode.TIMEFRAME_15M
+        """
+        Initialize strategy configuration
 
-        # Configuration file is now required
+        Args:
+            mode: Strategy mode (timeframe) to use
+            config_path: Path to config JSON file
+            freqtrade_config: FreqTrade configuration for auto-detection
+        """
+        # Determine which timeframe to use
+        if mode is not None and mode != StrategyMode.AUTO:
+            # Use explicitly provided mode
+            self.timeframe = mode.value
+        elif freqtrade_config is not None:
+            # Auto-detect from FreqTrade config
+            self.timeframe = freqtrade_config.get('timeframe', '15m')
+            logger.info(f"Auto-detected timeframe: {self.timeframe}")
+        else:
+            # Default to 15m
+            self.timeframe = StrategyMode.DEFAULT.value
+
+        # Configuration file is required
         if not config_path or not os.path.exists(config_path):
             raise ValueError(
                 f"Configuration file not found: {config_path}. A configuration file is required to use this strategy.")
 
-        # Rest of init remains the same
-        # Initialize basic placeholder attributes to avoid errors before loading
+        # Initialize placeholder attributes
         self._initialize_placeholder_attributes()
 
         # Load configuration
@@ -118,39 +128,6 @@ class StrategyConfig:
 
         # Log configuration summary
         logger.info(self.get_config_summary())
-
-    @classmethod
-    def detect_strategy_mode(cls, freqtrade_config: dict) -> 'StrategyMode':
-        """
-        Detect the appropriate StrategyMode based on the FreqTrade configuration
-
-        Args:
-            freqtrade_config: FreqTrade configuration dictionary
-
-        Returns:
-            StrategyMode: The matching strategy mode for the configuration timeframe
-        """
-
-        # Get timeframe from FreqTrade config, default to '15m' if not specified
-        freqtrade_timeframe = freqtrade_config.get('timeframe', '15m')
-
-        # Determine the strategy mode based on the FreqTrade timeframe
-        if freqtrade_timeframe == '1m':
-            return StrategyMode.TIMEFRAME_1M
-        elif freqtrade_timeframe == '5m':
-            return StrategyMode.TIMEFRAME_5M
-        elif freqtrade_timeframe == '15m':
-            return StrategyMode.TIMEFRAME_15M
-        elif freqtrade_timeframe == '30m':
-            return StrategyMode.TIMEFRAME_30M
-        elif freqtrade_timeframe == '1h':
-            return StrategyMode.TIMEFRAME_1H
-        else:
-            # Default to 15m if the timeframe is not recognized
-            logger.warning(
-                f"Timeframe {freqtrade_timeframe} not recognized for parameter selection. Using 15m parameters."
-            )
-            return StrategyMode.TIMEFRAME_15M
 
     def _initialize_placeholder_attributes(self):
         """Initialize placeholder attributes to avoid attribute errors"""

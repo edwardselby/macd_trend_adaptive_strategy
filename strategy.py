@@ -45,6 +45,9 @@ class MACDTrendAdaptiveStrategy(IStrategy):
     # Version 3 API - required for proper leverage
     INTERFACE_VERSION = 3
 
+    # Set strategy timeframe to auto-detect
+    STRATEGY_MODE = StrategyMode.AUTO
+
     # Futures and leverage settings
     can_short = True
     leverage_config = {"*": {"*": 10.0}}
@@ -67,9 +70,6 @@ class MACDTrendAdaptiveStrategy(IStrategy):
     ignore_roi_if_entry_signal = False
 
     def __init__(self, config: dict) -> None:
-        """
-        Initialize the strategy with all required components
-        """
         super().__init__(config)
 
         # Path to the configuration file
@@ -80,22 +80,26 @@ class MACDTrendAdaptiveStrategy(IStrategy):
                 f"Please create a configuration file before using this strategy."
             )
 
-        # Use freqtrade config to auto-detect strategy mode and load configuration
-        self.strategy_config = StrategyConfig(config_path=config_path, freqtrade_config=config)
+        # Auto-detect timeframe from FreqTrade config
+        self.strategy_config = StrategyConfig(
+            mode=self.STRATEGY_MODE,
+            config_path=config_path,
+            freqtrade_config=config
+        )
 
-        # Simplify attribute setting
-        self.startup_candle_count = self.strategy_config.startup_candle_count
+        # Set FreqTrade strategy parameters
         self.timeframe = self.strategy_config.timeframe
+        self.startup_candle_count = self.strategy_config.startup_candle_count
 
         # Simplified database and performance tracking
         self.db_handler = DBHandler(config)
         self.db_handler.set_strategy_name(self.__class__.__name__)
 
         self.is_backtest = (
-                config.get('runmode') in ('backtest', 'hyperopt') or
-                config.get('backtest', False) or
-                'timerange' in config or
-                'export' in config
+            config.get('runmode') in ('backtest', 'hyperopt') or
+            config.get('backtest', False) or
+            'timerange' in config or
+            'export' in config
         )
 
         if self.is_backtest:
