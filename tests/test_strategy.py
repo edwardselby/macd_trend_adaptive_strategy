@@ -10,7 +10,7 @@ from freqtrade.enums.exittype import ExitType
 from freqtrade.persistence import Trade
 
 from src.config.strategy_config import StrategyMode
-from strategy import MACDTrendAdaptiveStrategy
+from macd_trend_adaptive_strategy import MACDTrendAdaptiveStrategy
 from tests.conftest import set_market_state, cleanup_patchers
 
 
