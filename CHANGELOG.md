@@ -2,15 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
-## [unreleased] - 2025-03-21
+## [0.3.0] - 2025-03-22
 
-### Removed
-- Remove default config, now requires configuration file
-- Remove long_roi_boost
+### Added
+- Add setup-strategy.sh installation script
+- Add Git hooks for automatic strategy updates on pull/checkout
+- Add sample strategy wrapper for easier FreqTrade integration
 
 ### Changed
-- Refactored, simplified and expanded integration tests
-- Restructured root directory for easier cloning
+- Restructure root directories for better organization
+- Use relative imports for implementation files
+- Refactor package references for Python package mode
+- Refactor directory structure again for better maintainability
+- Simplify Git hook for copying strategy into FreqTrade
+
+### Improved
+- Refactor and expand integration tests
+- Fix mocking issues in conftest
 
 ## [0.2.0] - 2025-03-19
 
