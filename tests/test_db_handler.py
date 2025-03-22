@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from macd_trend_adaptive_strategy.performance.db_handler import DBHandler
+from src.strategy import DBHandler
 
 
 @pytest.fixture

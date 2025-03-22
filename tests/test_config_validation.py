@@ -4,8 +4,8 @@ import tempfile
 
 import pytest
 
-from config.config_validator import ConfigValidator
-from config.strategy_config import StrategyConfig, StrategyMode
+from src.config.config_validator import ConfigValidator
+from src.config.strategy_config import StrategyConfig, StrategyMode
 
 
 class TestConfigValidator:

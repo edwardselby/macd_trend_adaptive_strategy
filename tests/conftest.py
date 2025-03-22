@@ -1,18 +1,19 @@
 import json
 import os
 import tempfile
-import pytest
-import numpy as np
-import pandas as pd
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 
-from macd_trend_adaptive_strategy.config.strategy_config import StrategyConfig, StrategyMode
-from macd_trend_adaptive_strategy.performance.tracker import PerformanceTracker
-from macd_trend_adaptive_strategy.regime.detector import RegimeDetector
-from macd_trend_adaptive_strategy.risk_management.roi_calculator import ROICalculator
-from macd_trend_adaptive_strategy.risk_management.stoploss_calculator import StoplossCalculator
-from macd_trend_adaptive_strategy.performance.db_handler import DBHandler
+import numpy as np
+import pandas as pd
+import pytest
+
+from src.config.strategy_config import StrategyConfig, StrategyMode
+from src.performance.db_handler import DBHandler
+from src.performance.tracker import PerformanceTracker
+from src.regime.detector import RegimeDetector
+from src.risk_management.roi_calculator import ROICalculator
+from src.risk_management.stoploss_calculator import StoplossCalculator
 
 
 @pytest.fixture

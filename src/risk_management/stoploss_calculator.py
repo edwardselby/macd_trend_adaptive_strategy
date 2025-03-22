@@ -1,7 +1,7 @@
 import logging
 
-from ..regime import RegimeDetector
-from ..utils import log_stoploss_calculation, log_stoploss_price
+from src.regime.detector import RegimeDetector
+from src.utils.log_messages import log_stoploss_calculation, log_stoploss_price
 
 logger = logging.getLogger(__name__)
 

@@ -4,7 +4,7 @@ import tempfile
 import pytest
 from unittest.mock import patch, mock_open
 
-from config.strategy_config import StrategyConfig, StrategyMode
+from src.config.strategy_config import StrategyConfig, StrategyMode
 
 
 def test_strategy_config_requires_config_file():

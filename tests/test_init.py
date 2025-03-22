@@ -1,4 +1,4 @@
-from macd_trend_adaptive_strategy import MACDTrendAdaptiveStrategy
+from src.strategy import MACDTrendAdaptiveStrategy
 
 
 def test_strategy_import():
