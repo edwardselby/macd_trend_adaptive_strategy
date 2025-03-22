@@ -1,4 +1,4 @@
-from src.strategy import calculate_indicators, populate_entry_signals
+from strategy import calculate_indicators, populate_entry_signals
 
 
 def test_calculate_indicators(sample_dataframe, strategy_config):

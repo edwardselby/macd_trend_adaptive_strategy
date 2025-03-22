@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from src.strategy import DBHandler
+from strategy import DBHandler
 
 
 @pytest.fixture

@@ -3,8 +3,8 @@ from typing import Dict, Any
 
 from freqtrade.persistence import Trade
 
-from src.performance.db_handler import DBHandler
-from src.utils.log_messages import log_performance_update, log_performance_summary
+from ..performance.db_handler import DBHandler
+from ..utils.log_messages import log_performance_update, log_performance_summary
 
 logger = logging.getLogger(__name__)
 

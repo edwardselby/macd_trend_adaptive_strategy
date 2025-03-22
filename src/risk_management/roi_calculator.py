@@ -1,8 +1,8 @@
 import logging
 
-from src.performance.tracker import PerformanceTracker
-from src.regime.detector import RegimeDetector
-from src.utils.log_messages import log_roi_calculation
+from ..performance.tracker import PerformanceTracker
+from ..regime.detector import RegimeDetector
+from ..utils.log_messages import log_roi_calculation
 
 logger = logging.getLogger(__name__)
 

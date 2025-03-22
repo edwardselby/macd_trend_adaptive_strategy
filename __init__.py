@@ -4,7 +4,7 @@ A sophisticated trading strategy with dynamic risk management, adaptive ROI, and
 """
 
 # Explicitly import the strategy class to make it available
-from src.strategy import MACDTrendAdaptiveStrategy
+from strategy import MACDTrendAdaptiveStrategy
 
 # This tells Python what to export when someone does "from macd_trend_adaptive_strategy import *"
 __all__ = ['MACDTrendAdaptiveStrategy']
