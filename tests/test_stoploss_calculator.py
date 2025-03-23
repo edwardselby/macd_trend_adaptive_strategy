@@ -1,91 +1,63 @@
 from tests.conftest import set_market_state, cleanup_patchers
 
+import pytest
 
-def test_calculate_dynamic_stoploss(stoploss_calculator, regime_detector):
-    """Test that dynamic stoploss is calculated correctly"""
+
+@pytest.mark.parametrize(
+    "win_rate, regime, aligned_dir, test_dir, expected_min, expected_max", [
+        # win_rate, regime, aligned_direction, direction_to_test, min_value, max_value
+        (0.2, "neutral", None, "long", -0.011, -0.01),  # Min win rate, neutral regime
+        (0.8, "neutral", None, "long", -0.051, -0.05),  # Max win rate, neutral regime
+        (0.5, "neutral", None, "long", -0.031, -0.03),  # Mid win rate, neutral regime
+        (0.5, "bullish", "long", "short", -0.016, -0.015),  # Counter trend (short in bullish)
+        (0.5, "bullish", "long", "long", -0.046, -0.045),  # Aligned trend (long in bullish)
+        (0.5, "bearish", "short", "long", -0.016, -0.015),  # Counter trend (long in bearish)
+        (0.5, "bearish", "short", "short", -0.046, -0.045),  # Aligned trend (short in bearish)
+    ]
+)
+def test_calculate_dynamic_stoploss(
+        stoploss_calculator, regime_detector, win_rate, regime, aligned_dir, test_dir, expected_min, expected_max
+):
+    """Test that dynamic stoploss is calculated correctly based on market regime"""
     # Ensure dynamic stoploss is enabled
     stoploss_calculator.config.use_dynamic_stoploss = True
 
-    # Configure risk parameters
-    stoploss_calculator.config.risk_reward_ratio = 0.5  # 1:2 ratio
-    stoploss_calculator.config.counter_trend_stoploss_factor = 0.5
-    stoploss_calculator.config.aligned_trend_stoploss_factor = 1.5
-    stoploss_calculator.config.min_stoploss = -0.01
-    stoploss_calculator.config.max_stoploss = -0.1
+    # Set boundary parameters
+    stoploss_calculator.config.min_stoploss = -0.01  # Closer to zero (tighter)
+    stoploss_calculator.config.max_stoploss = -0.05  # Further from zero (wider)
 
-    # Test with a bullish regime
-    bullish_patchers = set_market_state(regime_detector, "bullish", "long")
+    # Set min and max win rates for normalization
+    stoploss_calculator.config.min_win_rate = 0.2
+    stoploss_calculator.config.max_win_rate = 0.8
+
+    # Configure trend alignment factors
+    stoploss_calculator.config.counter_trend_stoploss_factor = 0.5  # Makes stoploss tighter
+    stoploss_calculator.config.aligned_trend_stoploss_factor = 1.5  # Makes stoploss wider
+
+    # Set up market state
+    patchers = set_market_state(regime_detector, regime, aligned_dir)
     try:
-        # Test with various ROI values
-        roi_values = [0.04, 0.06, 0.08]
+        # Check if this direction is counter or aligned trend
+        is_counter = regime_detector.is_counter_trend(test_dir)
+        is_aligned = regime_detector.is_aligned_trend(test_dir)
 
-        for roi in roi_values:
-            # Calculate expected values
-            base_stoploss = -1 * roi * stoploss_calculator.config.risk_reward_ratio
-            expected_long_sl = base_stoploss * stoploss_calculator.config.aligned_trend_stoploss_factor
-            expected_short_sl = base_stoploss * stoploss_calculator.config.counter_trend_stoploss_factor
+        # Calculate stoploss
+        result = stoploss_calculator.calculate_dynamic_stoploss(win_rate, is_counter, is_aligned)
 
-            # Apply correct clamping logic to match implementation
-            if expected_long_sl > stoploss_calculator.config.min_stoploss:
-                expected_long_sl = stoploss_calculator.config.min_stoploss
-            elif expected_long_sl < stoploss_calculator.config.max_stoploss:
-                expected_long_sl = stoploss_calculator.config.max_stoploss
+        # Check if result is within expected range
+        assert expected_min <= result <= expected_max, \
+            f"With win_rate={win_rate}, regime={regime}, direction={test_dir}: " \
+            f"expected range [{expected_min}, {expected_max}], got {result}"
 
-            if expected_short_sl > stoploss_calculator.config.min_stoploss:
-                expected_short_sl = stoploss_calculator.config.min_stoploss
-            elif expected_short_sl < stoploss_calculator.config.max_stoploss:
-                expected_short_sl = stoploss_calculator.config.max_stoploss
+        # Verify behavior based on trend alignment
+        if is_counter:
+            assert result > -0.03, f"Counter-trend stoploss ({result}) should be tighter (closer to zero)"
+        elif is_aligned:
+            assert result < -0.03, f"Aligned-trend stoploss ({result}) should be wider (further from zero)"
 
-            # Test actual implementation
-            long_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "long")
-            short_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "short")
-
-            # Verify results
-            assert abs(long_sl - expected_long_sl) < 0.0001, f"Long SL: expected {expected_long_sl}, got {long_sl}"
-            assert abs(short_sl - expected_short_sl) < 0.0001, f"Short SL: expected {expected_short_sl}, got {short_sl}"
-
-            # Check relative values - counter trend should be tighter (less negative)
-            if expected_long_sl != expected_short_sl:
-                assert short_sl > long_sl, f"Short SL ({short_sl}) should be > Long SL ({long_sl})"
     finally:
-        cleanup_patchers(bullish_patchers)
-
-    # Test with a bearish regime
-    bearish_patchers = set_market_state(regime_detector, "bearish", "short")
-    try:
-        # Test one value to verify behavior inverts
-        roi = 0.05
-        long_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "long")
-        short_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "short")
-
-        # Now long should be counter-trend (tighter) and short should be aligned (wider)
-        # Only check if they're not clamped to the same value
-        if long_sl != short_sl:
-            assert long_sl > short_sl, f"With bearish regime, Long SL ({long_sl}) should be > Short SL ({short_sl})"
-    finally:
-        cleanup_patchers(bearish_patchers)
-
-    # Test with a neutral regime
-    neutral_patchers = set_market_state(regime_detector, "neutral", None)
-    try:
-        roi = 0.05
-        long_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "long")
-        short_sl = stoploss_calculator.calculate_dynamic_stoploss(roi, "short")
-
-        # In neutral regime, no adjustment for trend alignment
-        expected_sl = -1 * roi * stoploss_calculator.config.risk_reward_ratio
-
-        # Apply clamping if needed
-        if expected_sl > stoploss_calculator.config.min_stoploss:
-            expected_sl = stoploss_calculator.config.min_stoploss
-        elif expected_sl < stoploss_calculator.config.max_stoploss:
-            expected_sl = stoploss_calculator.config.max_stoploss
-
-        # Both directions should have the same stoploss
-        assert abs(long_sl - expected_sl) < 0.0001, f"Long SL: expected {expected_sl}, got {long_sl}"
-        assert abs(short_sl - expected_sl) < 0.0001, f"Short SL: expected {expected_sl}, got {short_sl}"
-    finally:
-        cleanup_patchers(neutral_patchers)
+        # Clean up patchers
+        cleanup_patchers(patchers)
 
 
 def test_calculate_stoploss_price(stoploss_calculator):

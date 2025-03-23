@@ -13,17 +13,30 @@ All notable changes to this project will be documented in this file.
   - StoplossCalculator now depends only on config
   - ROICalculator depends only on config
   - Strategy class coordinates between components
+- Updated test suite to verify new risk management approach:
+  - Rewrote test_calculate_dynamic_stoploss using parameterized tests
+  - Added test for ROI calculation from stoploss values
+  - Updated config tests to verify stoploss-to-ROI relationship
+  - Enhanced test for strategy exit behavior with different regimes
 
 ### Fixed
 - Made win rate scaling behavior more logical - higher win rates now use wider stoploss (more negative)
 - Fixed risk-reward ratio calculation to properly convert between stoploss and ROI
 - Improved boundary handling for stoploss and ROI values
 - Fixed configuration parameter handling for min/max stoploss values
+- Fixed trade cache ID handling in tests for more reliable test execution
+- Resolved issues with test patching for better reproducibility
+- Separated stoploss ordering test from other logical consistency tests
 
 ### Technical
 - Reduced component coupling for better maintainability
 - Improved separation of concerns in risk management system
 - Enhanced testability of individual components
+- Improved test stability with consistent datetime/timestamp handling
+- Added more comprehensive test assertions for derived parameters
+- Added parameterized tests for all market regimes and trade directions
+- Better debug output in failing tests for easier troubleshooting
+- Improved handling of floating-point comparisons in tests
 
 ## [0.4.0] - 2025-03-22
 

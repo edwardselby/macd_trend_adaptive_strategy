@@ -129,9 +129,9 @@ def regime_detector(performance_tracker, strategy_config):
 
 
 @pytest.fixture
-def roi_calculator(performance_tracker, regime_detector, strategy_config):
+def roi_calculator(strategy_config):
     """Create a real ROICalculator for testing"""
-    calculator = ROICalculator(performance_tracker, regime_detector, strategy_config)
+    calculator = ROICalculator(strategy_config)
 
     # Initialize roi_cache with known values for predictable tests
     calculator.roi_cache = {'long': 0.03, 'short': 0.02, 'last_updated': 0}
@@ -140,10 +140,9 @@ def roi_calculator(performance_tracker, regime_detector, strategy_config):
 
 
 @pytest.fixture
-def stoploss_calculator(regime_detector, strategy_config):
+def stoploss_calculator(strategy_config):
     """Create a real StoplossCalculator for testing"""
-    calculator = StoplossCalculator(regime_detector, strategy_config)
-
+    calculator = StoplossCalculator(strategy_config)
     return calculator
 
 

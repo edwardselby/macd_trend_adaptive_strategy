@@ -173,8 +173,8 @@ def test_config_derived_params():
     config_data = {
         "15m": {
             "risk_reward_ratio": "1:2",
-            "min_roi": 0.03,
-            "max_roi": 0.06
+            "min_stoploss": -0.02,  # Closer to zero (tighter)
+            "max_stoploss": -0.05  # Further from zero (wider)
         }
     }
 
@@ -186,14 +186,31 @@ def test_config_derived_params():
         config = StrategyConfig(mode=StrategyMode.TIMEFRAME_15M, config_path=temp_file_path)
 
         # Check derived parameters
-        assert config.base_roi == 0.045  # (0.03 + 0.06) / 2
-        assert config.risk_reward_ratio_float == 0.5  # 1:2 as float
-        assert config.min_stoploss == -0.015  # -1 * 0.03 * 0.5
-        assert config.max_stoploss == -0.03  # -1 * 0.06 * 0.5
+        assert config.risk_reward_ratio_float == 2.0  # 1:2 as float
+
+        # Base stoploss should be the average of min and max
+        expected_base_stoploss = (config.min_stoploss + config.max_stoploss) / 2  # (-0.02 + -0.05) / 2 = -0.035
+        assert abs(config.base_stoploss - expected_base_stoploss) < 0.0001, \
+            f"Expected base_stoploss {expected_base_stoploss}, got {config.base_stoploss}"
+
+        # ROI values should be derived from stoploss * risk_reward_ratio
+        expected_min_roi = abs(config.min_stoploss) * config.risk_reward_ratio_float  # 0.02 * 2 = 0.04
+        assert abs(config.min_roi - expected_min_roi) < 0.0001, \
+            f"Expected min_roi {expected_min_roi}, got {config.min_roi}"
+
+        expected_max_roi = abs(config.max_stoploss) * config.risk_reward_ratio_float  # 0.05 * 2 = 0.1
+        assert abs(config.max_roi - expected_max_roi) < 0.0001, \
+            f"Expected max_roi {expected_max_roi}, got {config.max_roi}"
+
+        expected_base_roi = abs(config.base_stoploss) * config.risk_reward_ratio_float  # 0.035 * 2 = 0.07
+        assert abs(config.base_roi - expected_base_roi) < 0.0001, \
+            f"Expected base_roi {expected_base_roi}, got {config.base_roi}"
 
         # Check fallback values
-        assert config.static_stoploss <= config.max_stoploss * 1.2
-        assert config.default_roi >= config.max_roi * 1.2
+        assert config.static_stoploss <= config.max_stoploss * 1.2, \
+            "static_stoploss should be more negative than max_stoploss"
+        assert config.default_roi >= config.max_roi * 1.2, \
+            "default_roi should be higher than max_roi"
 
     finally:
         # Clean up the temporary file

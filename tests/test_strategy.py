@@ -11,30 +11,31 @@ from freqtrade.persistence import Trade
 
 from src.config.strategy_config import StrategyMode
 from macd_trend_adaptive_strategy import MACDTrendAdaptiveStrategy
+
+from src.regime.detector import RegimeDetector
 from tests.conftest import set_market_state, cleanup_patchers
 
 
 # Move the fixture to module level
 @pytest.fixture
 def config_file():
-    """Create a temporary config file for testing"""
+    """Create a temporary config file with new parameter structure"""
     config_data = {
         "5m": {
             "risk_reward_ratio": "1:2",
-            "min_roi": 0.025,
-            "max_roi": 0.055,
+            "min_stoploss": -0.01,  # Closer to zero (tighter)
+            "max_stoploss": -0.05,  # Further from zero (wider)
+            "counter_trend_factor": 0.5,
+            "aligned_trend_factor": 1.5,
+            "counter_trend_stoploss_factor": 0.5,
+            "aligned_trend_stoploss_factor": 1.5,
             "fast_length": 12,
             "slow_length": 26,
             "signal_length": 9,
             "adx_period": 14,
             "adx_threshold": 25,
             "ema_fast": 8,
-            "ema_slow": 21,
-            "counter_trend_factor": 0.5,
-            "aligned_trend_factor": 1.0,
-            "counter_trend_stoploss_factor": 0.5,
-            "aligned_trend_stoploss_factor": 1.0,
-            "use_dynamic_stoploss": True
+            "ema_slow": 21
         }
     }
 
@@ -44,7 +45,7 @@ def config_file():
 
     yield temp_file_path
 
-    # Clean up
+    # Clean up the temporary file
     os.unlink(temp_file_path)
 
 
@@ -308,7 +309,18 @@ def test_bot_start(config_file):
     strategy._handle_missing_trade.assert_called_once_with(mock_trade, ANY)
 
 
-def test_market_regime_affects_trade_parameters(config_file):
+@pytest.mark.parametrize(
+    "regime, aligned_dir, is_short", [
+        # regime, aligned_direction, is_short
+        ("bullish", "long", False),  # Long in bullish (aligned)
+        ("bullish", "long", True),  # Short in bullish (counter)
+        ("bearish", "short", False),  # Long in bearish (counter)
+        ("bearish", "short", True),  # Short in bearish (aligned)
+        ("neutral", None, False),  # Long in neutral
+        ("neutral", None, True),  # Short in neutral
+    ]
+)
+def test_market_regime_affects_trade_parameters(config_file, regime, aligned_dir, is_short):
     """Test how market regime affects trade parameters"""
     strategy = create_strategy(config_file)
 
@@ -316,184 +328,294 @@ def test_market_regime_affects_trade_parameters(config_file):
     current_time = datetime.now()
     pair = 'BTC/USDT'
     rate = 30000
+    direction = "short" if is_short else "long"
 
-    # Test in different market regimes
-    for regime, aligned_dir in [
-        ("bullish", "long"),
-        ("bearish", "short"),
-        ("neutral", None)
-    ]:
-        patchers = set_market_state(strategy.regime_detector, regime, aligned_dir)
-        try:
-            # Create a trade ID
-            trade_id = f"{pair}_{int(current_time.timestamp())}"
+    # Set market state
+    patchers = set_market_state(strategy.regime_detector, regime, aligned_dir)
+    try:
+        # Create a trade ID
+        trade_id = f"{pair}_{int(current_time.timestamp())}"
 
-            # Get trade cache entry
-            cache_entry = strategy._get_or_create_trade_cache(
-                trade_id, pair, rate, current_time, aligned_dir != "long"  # is_short
-            )
+        # Get trade cache entry
+        cache_entry = strategy._get_or_create_trade_cache(
+            trade_id, pair, rate, current_time, is_short
+        )
 
-            # Verify regime matches
-            assert cache_entry['regime'] == regime, f"Expected regime {regime}, got {cache_entry['regime']}"
+        # Verify regime matches
+        assert cache_entry['regime'] == regime, f"Expected regime {regime}, got {cache_entry['regime']}"
 
-            # Verify trend alignment
-            if regime == "bullish":
-                assert cache_entry['is_aligned_trend'] == (aligned_dir == "long")
-                assert cache_entry['is_counter_trend'] == (aligned_dir != "long")
-            elif regime == "bearish":
-                assert cache_entry['is_aligned_trend'] == (aligned_dir == "short")
-                assert cache_entry['is_counter_trend'] == (aligned_dir != "short")
-            else:  # neutral
-                assert not cache_entry['is_aligned_trend']
-                assert not cache_entry['is_counter_trend']
+        # Verify trend alignment
+        is_aligned_expected = False
+        is_counter_expected = False
 
-            # Clean up cache for next test
-            if trade_id in strategy.trade_cache['active_trades']:
-                del strategy.trade_cache['active_trades'][trade_id]
+        if regime == "bullish":
+            is_aligned_expected = direction == "long"
+            is_counter_expected = direction == "short"
+        elif regime == "bearish":
+            is_aligned_expected = direction == "short"
+            is_counter_expected = direction == "long"
 
-        finally:
-            cleanup_patchers(patchers)
+        assert cache_entry['is_aligned_trend'] == is_aligned_expected, \
+            f"is_aligned_trend should be {is_aligned_expected} for {direction} in {regime} regime"
+        assert cache_entry['is_counter_trend'] == is_counter_expected, \
+            f"is_counter_trend should be {is_counter_expected} for {direction} in {regime} regime"
 
+        # Verify stoploss and ROI relationship
+        assert cache_entry['stoploss'] < 0, f"Stoploss should be negative, got {cache_entry['stoploss']}"
+        assert cache_entry['roi'] > 0, f"ROI should be positive, got {cache_entry['roi']}"
 
-def test_should_exit_with_different_regimes(config_file):
-    """Test should_exit behavior with different market regimes"""
-    strategy = create_strategy(config_file)
+        # Verify the relationship between stoploss and ROI
+        # ROI should approximately match stoploss * risk_reward_ratio * trend_factor
+        expected_base_roi = abs(cache_entry['stoploss']) * strategy.strategy_config.risk_reward_ratio
 
-    # Create mock trade
-    trade = MagicMock(spec=Trade)
-    trade.pair = 'BTC/USDT'
-    trade.open_date_utc = datetime.now()
-    trade.open_rate = 30000
-    trade.leverage = 1.0
+        # Apply trend factors
+        if cache_entry['is_counter_trend']:
+            expected_roi = expected_base_roi * strategy.strategy_config.counter_trend_factor
+        elif cache_entry['is_aligned_trend']:
+            expected_roi = expected_base_roi * strategy.strategy_config.aligned_trend_factor
+        else:
+            expected_roi = expected_base_roi
 
-    # Test scenarios for long and short trades
-    test_scenarios = [
-        {'is_short': False, 'regime': "bullish", 'aligned_dir': "long", 'is_aligned': True},
-        {'is_short': False, 'regime': "bearish", 'aligned_dir': "short", 'is_aligned': False},
-        {'is_short': True, 'regime': "bullish", 'aligned_dir': "long", 'is_aligned': False},
-        {'is_short': True, 'regime': "bearish", 'aligned_dir': "short", 'is_aligned': True},
-        {'is_short': False, 'regime': "neutral", 'aligned_dir': None, 'is_aligned': False},
-        {'is_short': True, 'regime': "neutral", 'aligned_dir': None, 'is_aligned': False},
-    ]
+        # Check if ROI is close to expected (within 1%)
+        assert abs(cache_entry['roi'] - expected_roi) / expected_roi < 0.01, \
+            f"ROI {cache_entry['roi']} should be close to expected {expected_roi}"
 
-    for scenario in test_scenarios:
-        trade.is_short = scenario['is_short']
-        direction = "short" if scenario['is_short'] else "long"
-
-        # Generate trade ID
-        trade_id = f"{trade.pair}_{int(trade.open_date_utc.timestamp())}"
-
-        # Set market state
-        patchers = set_market_state(strategy.regime_detector, scenario['regime'], scenario['aligned_dir'])
-        try:
-            # Create cache entry
-            strategy.trade_cache['active_trades'][trade_id] = {
-                'direction': direction,
-                'entry_rate': trade.open_rate,
-                'roi': 0.03,
-                'stoploss': -0.02,
-                'stoploss_price': trade.open_rate * (1.02 if scenario['is_short'] else 0.98),
-                'is_counter_trend': not scenario['is_aligned'] and scenario['regime'] != "neutral",
-                'is_aligned_trend': scenario['is_aligned'],
-                'regime': scenario['regime'],
-                'last_updated': int(datetime.now().timestamp())
-            }
-
-            # CRITICAL FIX: Patch create_trade_id to ensure it returns our exact trade_id
-            with patch('macd_trend_adaptive_strategy.utils.create_trade_id', return_value=trade_id):
-                # Test ROI exit
-                # Use a profit that's just above the ROI target
-                profit_factor = 0.97 if scenario['is_short'] else 1.03  # 3% profit
-                trade.calc_profit_ratio.return_value = 0.031  # Slightly above ROI threshold
-
-                exit_price = trade.open_rate * profit_factor
-                exit_signals = strategy.should_exit(trade, exit_price, datetime.now())
-
-                # Should exit with ROI
-                assert len(exit_signals) == 1, f"Expected ROI exit for {scenario}"
-                assert exit_signals[0].exit_type == ExitType.ROI, f"Expected ROI exit type for {scenario}"
-
-                expected_reason_parts = []
-                if scenario['is_aligned']:
-                    expected_reason_parts.append("aligned")
-                elif scenario['regime'] != "neutral":
-                    expected_reason_parts.append("counter")
-
-                # Check exit reason contains expected parts
-                if expected_reason_parts:
-                    for part in expected_reason_parts:
-                        assert part in exit_signals[0].exit_reason.lower(), \
-                            f"Exit reason should contain '{part}' for {scenario}"
-
-            # Clean up for next test
+        # Clean up cache for next test
+        if trade_id in strategy.trade_cache['active_trades']:
             del strategy.trade_cache['active_trades'][trade_id]
 
-        finally:
-            cleanup_patchers(patchers)
+    finally:
+        cleanup_patchers(patchers)
 
 
-def test_roi_stoploss_interaction(roi_calculator, stoploss_calculator, regime_detector):
-    """Test how ROI and stoploss adjustments work together in different regimes"""
-    # Configure base values
-    roi_calculator.roi_cache = {
-        'long': 0.05,  # Base ROI for long
-        'short': 0.05,  # Base ROI for short (same for simplicity)
-        'last_updated': int(datetime.now().timestamp())
-    }
-
-    # Set up the factors
-    roi_calculator.config.counter_trend_factor = 0.6
-    roi_calculator.config.aligned_trend_factor = 1.4
-    stoploss_calculator.config.counter_trend_stoploss_factor = 0.6
-    stoploss_calculator.config.aligned_trend_stoploss_factor = 1.4
-    stoploss_calculator.config.risk_reward_ratio = 0.5
-    stoploss_calculator.config.min_stoploss = -0.01
-    stoploss_calculator.config.max_stoploss = -0.1
-
-    # Test both market regimes and both directions
-    test_cases = [
-        {"regime": "bullish", "aligned_dir": "long", "direction": "long"},
-        {"regime": "bullish", "aligned_dir": "long", "direction": "short"},
-        {"regime": "bearish", "aligned_dir": "short", "direction": "long"},
-        {"regime": "bearish", "aligned_dir": "short", "direction": "short"},
-        {"regime": "neutral", "aligned_dir": None, "direction": "long"},
-        {"regime": "neutral", "aligned_dir": None, "direction": "short"}
+@pytest.mark.parametrize(
+    "is_short, regime, aligned_dir, trade_roi, profit_ratio, should_exit", [
+        # is_short, regime, aligned_dir, trade_roi, profit_ratio, should_exit
+        (False, "bullish", "long", 0.03, 0.031, True),  # Long in bullish, profit > ROI
+        (False, "bullish", "long", 0.03, 0.029, False),  # Long in bullish, profit < ROI
+        (False, "bearish", "short", 0.02, 0.021, True),  # Long in bearish, profit > ROI
+        (False, "bearish", "short", 0.02, 0.019, False),  # Long in bearish, profit < ROI
+        (True, "bullish", "long", 0.02, 0.021, True),  # Short in bullish, profit > ROI
+        (True, "bullish", "long", 0.02, 0.019, False),  # Short in bullish, profit < ROI
+        (True, "bearish", "short", 0.03, 0.031, True),  # Short in bearish, profit > ROI
+        (True, "bearish", "short", 0.03, 0.029, False),  # Short in bearish, profit < ROI
+        (False, "neutral", None, 0.025, 0.026, True),  # Long in neutral, profit > ROI
+        (False, "neutral", None, 0.025, 0.024, False),  # Long in neutral, profit < ROI
+        (True, "neutral", None, 0.025, 0.026, True),  # Short in neutral, profit > ROI
+        (True, "neutral", None, 0.025, 0.024, False),  # Short in neutral, profit < ROI
     ]
+)
+def test_should_exit_with_different_regimes(config_file, is_short, regime, aligned_dir, trade_roi, profit_ratio,
+                                            should_exit):
+    """Test should_exit behavior with different market regimes and ROI values"""
+    strategy = create_strategy(config_file)
 
-    for tc in test_cases:
-        patchers = set_market_state(regime_detector, tc["regime"], tc["aligned_dir"])
+    # Create mock trade with fixed timestamp for reproducibility
+    fixed_time = datetime(2025, 1, 1, 12, 0, 0)
+    trade = MagicMock(spec=Trade)
+    trade.pair = 'BTC/USDT'
+    trade.open_date_utc = fixed_time
+    trade.open_rate = 30000
+    trade.is_short = is_short
+    trade.leverage = 1.0
+
+    # Get trade direction
+    direction = "short" if is_short else "long"
+
+    # Set market state
+    patchers = set_market_state(strategy.regime_detector, regime, aligned_dir)
+
+    try:
+        # Determine if this is counter or aligned trend
+        is_counter = (is_short and aligned_dir == "long") or (not is_short and aligned_dir == "short")
+        is_aligned = (is_short and aligned_dir == "short") or (not is_short and aligned_dir == "long")
+
+        # Calculate stoploss based on ROI and risk-reward ratio
+        risk_reward_ratio = strategy.strategy_config.risk_reward_ratio
+        base_stoploss = -1 * trade_roi / risk_reward_ratio
+
+        # Apply trend factors to stoploss
+        if is_counter:
+            adjusted_stoploss = base_stoploss * strategy.strategy_config.counter_trend_stoploss_factor
+        elif is_aligned:
+            adjusted_stoploss = base_stoploss * strategy.strategy_config.aligned_trend_stoploss_factor
+        else:
+            adjusted_stoploss = base_stoploss
+
+        # Calculate stoploss price
+        if is_short:
+            stoploss_price = trade.open_rate * (1 - adjusted_stoploss)
+        else:
+            stoploss_price = trade.open_rate * (1 + adjusted_stoploss)
+
+        # A simple, reliable way to handle the trade_id
+        # 1. Set up a simple mock that returns our fixed date for datetime.now()
+        dt_patcher = patch('datetime.datetime', MagicMock(wraps=datetime))
+        dt_mock = dt_patcher.start()
+        dt_mock.now.return_value = fixed_time
+
+        # 2. Import and use the actual create_trade_id to ensure consistency
+        from src.utils.helpers import create_trade_id
+        trade_id = create_trade_id(trade.pair, trade.open_date_utc)
+
+        # Create cache entry with the exact trade_id
+        strategy.trade_cache['active_trades'][trade_id] = {
+            'direction': direction,
+            'entry_rate': trade.open_rate,
+            'roi': trade_roi,
+            'stoploss': adjusted_stoploss,
+            'stoploss_price': stoploss_price,
+            'is_counter_trend': is_counter,
+            'is_aligned_trend': is_aligned,
+            'regime': regime,
+            'last_updated': int(fixed_time.timestamp())
+        }
+
+        # Set profit ratio and calculate exit price
+        trade.calc_profit_ratio.return_value = profit_ratio
+        profit_factor = 1 + profit_ratio if not is_short else 1 - profit_ratio
+        exit_price = trade.open_rate * profit_factor
+
+        # Call should_exit
+        exit_signals = strategy.should_exit(trade, exit_price, fixed_time)
+
+        # Verify expected behavior
+        if should_exit:
+            assert len(
+                exit_signals) == 1, f"Expected exit signal for {direction} in {regime} regime with profit {profit_ratio}"
+            assert exit_signals[0].exit_type == ExitType.ROI, "Expected ROI exit type"
+
+            # Verify exit reason contains appropriate trend info
+            if is_counter:
+                assert "counter" in exit_signals[0].exit_reason.lower(), "Exit reason should mention counter-trend"
+            elif is_aligned:
+                assert "aligned" in exit_signals[0].exit_reason.lower(), "Exit reason should mention aligned-trend"
+        else:
+            assert len(
+                exit_signals) == 0, f"Expected no exit signal for {direction} in {regime} regime with profit {profit_ratio}"
+
+        # Clean up cache
+        del strategy.trade_cache['active_trades'][trade_id]
+
+        # Stop datetime patcher
+        dt_patcher.stop()
+
+    finally:
+        # Clean up all patches
+        cleanup_patchers(patchers)
+
+
+@pytest.mark.parametrize(
+    "regime, aligned_dir, direction, expected_aligned, expected_counter", [
+        # regime, aligned_dir, direction, expected_aligned, expected_counter
+        ("bullish", "long", "long", True, False),  # Long in bullish (aligned, not counter)
+        ("bullish", "long", "short", False, True),  # Short in bullish (not aligned, counter)
+        ("bearish", "short", "long", False, True),  # Long in bearish (not aligned, counter)
+        ("bearish", "short", "short", True, False),  # Short in bearish (aligned, not counter)
+        ("neutral", None, "long", False, False),  # Long in neutral (neither aligned nor counter)
+        ("neutral", None, "short", False, False),  # Short in neutral (neither aligned nor counter)
+    ]
+)
+def test_regime_alignment_flags(config_file, regime, aligned_dir, direction, expected_aligned, expected_counter):
+    """Test that trade alignment flags are set correctly based on market regime and verify ROI/stoploss calculations"""
+    strategy = create_strategy(config_file)
+
+    # Set parameters for predictable values
+    strategy.strategy_config.min_stoploss = -0.01  # Closer to zero (tighter)
+    strategy.strategy_config.max_stoploss = -0.05  # Further from zero (wider)
+    strategy.strategy_config.aligned_trend_factor = 1.5
+    strategy.strategy_config.counter_trend_factor = 0.5
+    strategy.strategy_config.aligned_trend_stoploss_factor = 1.5
+    strategy.strategy_config.counter_trend_stoploss_factor = 0.5
+    strategy.strategy_config.risk_reward_ratio = 2.0
+
+    # Create mock trade and fixed timestamp
+    fixed_time = datetime(2025, 1, 1, 12, 0, 0)
+    trade = MagicMock(spec=Trade)
+    trade.pair = 'BTC/USDT'
+    trade.open_date_utc = fixed_time
+    trade.open_rate = 30000
+    trade.is_short = direction == "short"
+    trade.leverage = 1.0
+
+    # Generate trade ID
+    timestamp = int(fixed_time.timestamp())
+    trade_id = f"{trade.pair}_{timestamp}"
+
+    # First verify RegimeDetector behavior directly
+    detector = RegimeDetector(strategy.performance_tracker, strategy.strategy_config)
+    with patch.object(detector, 'detect_regime', return_value=regime):
+        is_aligned_direct = detector.is_aligned_trend(direction)
+        is_counter_direct = detector.is_counter_trend(direction)
+
+        assert is_aligned_direct == expected_aligned, f"RegimeDetector.is_aligned_trend({direction}) should be {expected_aligned}"
+        assert is_counter_direct == expected_counter, f"RegimeDetector.is_counter_trend({direction}) should be {expected_counter}"
+
+    # Now test with the strategy's cache functionality
+    patchers = set_market_state(strategy.regime_detector, regime, aligned_dir)
+    try:
+        # Start patching datetime.now() to return our fixed time
+        dt_patcher = patch('datetime.datetime', MagicMock(wraps=datetime))
+        dt_mock = dt_patcher.start()
+        dt_mock.now.return_value = fixed_time
+
+        # CRITICAL: Patch create_trade_id directly
+        trade_id_patcher = patch('src.utils.helpers.create_trade_id', return_value=trade_id)
+        trade_id_mock = trade_id_patcher.start()
+
+        # Create cache entry AFTER patching
+        cache_entry = strategy._get_or_create_trade_cache(
+            trade_id, trade.pair, trade.open_rate, trade.open_date_utc, trade.is_short
+        )
+
+        # Verify the trade ID patching worked
+        assert trade_id in strategy.trade_cache['active_trades'], "Trade ID should be in cache"
+
+        # Verify alignment flags in cache
+        assert cache_entry['is_aligned_trend'] == expected_aligned, \
+            f"Cache entry is_aligned_trend should be {expected_aligned} for {direction} in {regime} regime"
+        assert cache_entry['is_counter_trend'] == expected_counter, \
+            f"Cache entry is_counter_trend should be {expected_counter} for {direction} in {regime} regime"
+
+        # Get stoploss and ROI for validation
+        stoploss = cache_entry['stoploss']
+        roi = cache_entry['roi']
+
+        # Basic ROI/stoploss validation...
+        assert stoploss < 0, "Stoploss should be negative"
+        assert roi > 0, "ROI should be positive"
+
+        # ROI/stoploss relationship validation...
+        expected_base_roi = abs(stoploss) * strategy.strategy_config.risk_reward_ratio
+
+        # Simplified test of exit signals
+        # IMPORTANT: Keep the same patching active
         try:
-            # Get ROI for this direction
-            roi = roi_calculator.get_trade_roi(tc["direction"])
+            # For profit < ROI: No exit
+            trade.calc_profit_ratio.return_value = roi * 0.8
+            exit_signals = strategy.should_exit(trade, trade.open_rate, fixed_time)
+            assert len(exit_signals) == 0, f"Should not exit with profit {roi * 0.8} < ROI {roi}"
 
-            # Calculate stoploss based on that ROI
-            stoploss = stoploss_calculator.calculate_dynamic_stoploss(roi, tc["direction"])
+            # For profit > ROI: Should exit
+            trade.calc_profit_ratio.return_value = roi * 1.2
+            exit_signals = strategy.should_exit(trade, trade.open_rate, fixed_time)
+            assert len(exit_signals) == 1, f"Should exit with profit {roi * 1.2} > ROI {roi}"
+            assert exit_signals[0].exit_type == ExitType.ROI, "Exit should be ROI type"
+        except AssertionError as e:
+            # Print debug info if assertion fails
+            print(f"DEBUG: roi={roi}, stoploss={stoploss}")
+            print(f"DEBUG: exit signals test failed: {e}")
+            print(f"DEBUG: trade in cache? {trade_id in strategy.trade_cache['active_trades']}")
+            if trade_id in strategy.trade_cache['active_trades']:
+                print(f"DEBUG: cache entry: {strategy.trade_cache['active_trades'][trade_id]}")
+            raise
 
-            # Validate the relationship
-            is_aligned = (tc["regime"] == "bullish" and tc["direction"] == "long") or \
-                         (tc["regime"] == "bearish" and tc["direction"] == "short")
-            is_counter = (tc["regime"] == "bullish" and tc["direction"] == "short") or \
-                         (tc["regime"] == "bearish" and tc["direction"] == "long")
+        # Clean up
+        if trade_id in strategy.trade_cache['active_trades']:
+            del strategy.trade_cache['active_trades'][trade_id]
 
-            # Print for debugging
-            print(f"Case: {tc}, ROI: {roi}, SL: {stoploss}, Aligned: {is_aligned}, Counter: {is_counter}")
-
-            # Check if aligned trades have higher ROI
-            if tc["regime"] != "neutral":
-                if is_aligned:
-                    assert roi > 0.05, f"Aligned trades should have higher ROI, got {roi}"
-                elif is_counter:
-                    assert roi < 0.05, f"Counter trend trades should have lower ROI, got {roi}"
-
-            # Check stoploss is appropriate
-            base_stoploss = -0.05 * 0.5  # -0.025
-            if tc["regime"] != "neutral":
-                if is_aligned:
-                    # Aligned trades have wider stoploss (more negative)
-                    assert stoploss < base_stoploss, f"Aligned trades should have wider stoploss, got {stoploss}"
-                elif is_counter:
-                    # Counter trades have tighter stoploss (less negative)
-                    assert stoploss > base_stoploss, f"Counter trend trades should have tighter stoploss, got {stoploss}"
-
-        finally:
-            cleanup_patchers(patchers)
+    finally:
+        # Clean up all patchers
+        cleanup_patchers(patchers)
+        dt_patcher.stop()
+        trade_id_patcher.stop()

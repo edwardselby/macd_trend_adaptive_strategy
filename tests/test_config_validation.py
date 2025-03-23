@@ -108,9 +108,7 @@ class TestConfigValidator:
         """Test that logical consistency between parameters is validated"""
         config = StrategyConfig(mode=StrategyMode.DEFAULT, config_path=sample_config_file)
 
-        # Create logical inconsistencies
-        config.min_roi = 0.06
-        config.max_roi = 0.04  # min_roi should be less than max_roi
+        # Test logical consistency for length parameters
         config.fast_length = 30
         config.slow_length = 20  # fast_length should be less than slow_length
         config.ema_fast = 25
@@ -119,19 +117,44 @@ class TestConfigValidator:
         # Apply fixes
         errors, fixes = ConfigValidator.validate_and_fix(config)
 
-        # Instead of checking exact values (which are implementation-dependent),
-        # just check the relationship was fixed
-        assert config.min_roi <= config.max_roi, "min_roi should be less than or equal to max_roi"
+        # Verify the relationships were fixed
         assert config.fast_length < config.slow_length, "fast_length should be less than slow_length"
         assert config.ema_fast < config.ema_slow, "ema_fast should be less than ema_slow"
 
         # Check that fixes mention the parameters
-        assert any(("roi" in fix.lower() or "min_" in fix.lower() or "max_" in fix.lower()) for fix in fixes), \
-            "Should mention ROI parameters in fixes"
         assert any(("length" in fix.lower() or "fast_" in fix.lower() or "slow_" in fix.lower()) for fix in fixes), \
             "Should mention length parameters in fixes"
-        assert any(("ema" in fix.lower()) for fix in fixes), \
-            "Should mention EMA parameters in fixes"
+        assert any(("ema" in fix.lower()) for fix in fixes), "Should mention EMA parameters in fixes"
+
+    def test_stoploss_ordering_in_strategy_config(self):
+        """Test that min_stoploss and max_stoploss are correctly ordered in StrategyConfig"""
+        # Create a config with deliberately reversed stoploss values
+        config_data = {
+            "15m": {
+                "risk_reward_ratio": "1:2",
+                "min_stoploss": -0.06,  # More negative (wrong - should be closer to zero)
+                "max_stoploss": -0.02  # Less negative (wrong - should be further from zero)
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
+            json.dump(config_data, temp_file)
+            temp_file_path = temp_file.name
+
+        try:
+            # Creating the config should trigger the fix during initialization
+            config = StrategyConfig(mode=StrategyMode.TIMEFRAME_15M, config_path=temp_file_path)
+
+            # Verify the values were swapped to the correct order
+            assert config.min_stoploss == -0.02, "min_stoploss should be -0.02 (less negative, closer to zero)"
+            assert config.max_stoploss == -0.06, "max_stoploss should be -0.06 (more negative, further from zero)"
+
+            # Verify ROI values were calculated correctly after swapping
+            assert config.min_roi == 0.04, "min_roi should be 0.02 × 2 = 0.04"
+            assert config.max_roi == 0.12, "max_roi should be 0.06 × 2 = 0.12"
+
+        finally:
+            os.unlink(temp_file_path)
 
     def test_parameter_info(self):
         """Test getting parameter information"""
