@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- Completely inverted the risk management approach to be more intuitive:
+  - Stoploss values are now the primary parameters (min_stoploss, max_stoploss)
+  - ROI targets are derived from stoploss values using risk-reward ratio
+  - Risk-reward ratio now properly represents reward:risk (e.g., 1:2 means target 2x profit relative to risk)
+- Refactored risk management components to reduce dependencies:
+  - StoplossCalculator now depends only on config
+  - ROICalculator depends only on config
+  - Strategy class coordinates between components
+
+### Fixed
+- Made win rate scaling behavior more logical - higher win rates now use wider stoploss (more negative)
+- Fixed risk-reward ratio calculation to properly convert between stoploss and ROI
+- Improved boundary handling for stoploss and ROI values
+- Fixed configuration parameter handling for min/max stoploss values
+
+### Technical
+- Reduced component coupling for better maintainability
+- Improved separation of concerns in risk management system
+- Enhanced testability of individual components
+
 ## [0.4.0] - 2025-03-22
 
 ### Added
