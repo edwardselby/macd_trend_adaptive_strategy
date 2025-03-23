@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2025-03-22
+
+### Added
+- Add automatic timeframe detection from FreqTrade configuration
+- Add simplified system to use optimal parameters for each timeframe
+
+### Changed
+- Simplify timeframe configuration handling with direct string values
+- Improve strategy initialization with auto-detection capabilities
+- Update README with latest features and documentation
+
+### Fixed
+- Fix timeframe auto-detection edge cases
+- Fix compatibility with test suite for timeframe detection
+- Fix configuration loading for various timeframes
+
 ## [0.3.0] - 2025-03-22
 
 ### Added
