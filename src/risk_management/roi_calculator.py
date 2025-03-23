@@ -1,30 +1,18 @@
-import logging
-
-from ..performance.tracker import PerformanceTracker
-from ..regime.detector import RegimeDetector
-from ..utils.log_messages import log_roi_calculation
-
-logger = logging.getLogger(__name__)
-
-
 class ROICalculator:
-    """Calculates adaptive ROI values based on performance and market regime"""
+    """Calculates adaptive ROI values based on stoploss and market regime"""
 
-    def __init__(self, performance_tracker: PerformanceTracker, regime_detector: RegimeDetector, config):
+    def __init__(self, config):
         """
-        Initialize with needed components and configuration
+        Initialize with configuration only
 
         Args:
-            performance_tracker: For win rate information
-            regime_detector: For market regime information
             config: Strategy configuration with ROI parameters
         """
-        self.performance_tracker = performance_tracker
-        self.regime_detector = regime_detector
         self.config = config
 
         # Get default ROI from config or calculate a fallback value
-        default_roi = getattr(self.config, 'default_roi', self.config.max_roi * 1.2)
+        default_roi = getattr(self.config, 'default_roi',
+                              abs(self.config.max_stoploss) * self.config.risk_reward_ratio * 1.2)
 
         # Cache for ROI values to reduce recalculation frequency
         self.roi_cache = {
@@ -33,70 +21,23 @@ class ROICalculator:
             'last_updated': 0
         }
 
-    def _calculate_adaptive_roi(self, direction: str) -> float:
+    def calculate_roi_from_stoploss(self, stoploss: float, is_counter_trend: bool, is_aligned_trend: bool) -> float:
         """
-        Calculate adaptive ROI based on recent win rate for a direction.
-
-        The ROI scales linearly between min_roi and max_roi based on the win rate
-        between min_win_rate and max_win_rate.
+        Calculate ROI based on stoploss value and trend alignment
 
         Args:
-            direction: Trade direction ('long' or 'short')
+            stoploss: The calculated stoploss value (negative number)
+            is_counter_trend: Whether this trade counters the market regime
+            is_aligned_trend: Whether this trade aligns with market regime
 
         Returns:
-            float: Calculated ROI target as a decimal (e.g., 0.05 for 5%)
+            float: Target ROI value
         """
-        win_rate = self.performance_tracker.get_recent_win_rate(direction)
+        # Calculate base ROI from stoploss using risk-reward ratio
+        # Stoploss is negative, so take absolute value
+        base_roi = abs(stoploss) * self.config.risk_reward_ratio
 
-        # Normalize win rate to 0-1 range for scaling
-        normalized_wr = max(0, min(1, (win_rate - self.config.min_win_rate) /
-                                   (self.config.max_win_rate - self.config.min_win_rate)))
-
-        # Calculate ROI based on normalized win rate
-        adaptive_roi = self.config.min_roi + normalized_wr * (
-                self.config.max_roi - self.config.min_roi)
-
-        # Ensure ROI stays within bounds
-        return max(self.config.min_roi, min(self.config.max_roi, adaptive_roi))
-
-    def update_roi_cache(self, current_timestamp: int) -> None:
-        """
-        Update cached ROI values if needed
-
-        Args:
-            current_timestamp: Current time as unix timestamp
-        """
-        # Check if cache needs updating
-        if (current_timestamp - self.roi_cache['last_updated']) > self.config.roi_cache_update_interval:
-            # Update ROI values
-            self.roi_cache['long'] = self._calculate_adaptive_roi('long')
-            self.roi_cache['short'] = self._calculate_adaptive_roi('short')
-            self.roi_cache['last_updated'] = current_timestamp
-
-            # Log the updated values
-            logger.debug(
-                f"Updated ROI cache - "
-                f"Long: {self.roi_cache['long']:.2%}, "
-                f"Short: {self.roi_cache['short']:.2%}"
-            )
-
-    def get_trade_roi(self, direction: str) -> float:
-        """
-        Calculate the appropriate ROI target for a specific trade based on:
-        1. Direction-specific win rate
-        2. Whether the trade is counter-trend or aligned with the market regime
-
-        Args:
-            direction: Trade direction ('long' or 'short')
-
-        Returns:
-            float: ROI target for this trade
-        """
-        # Get base ROI from cache
-        base_roi = self.roi_cache[direction]
-        is_counter_trend = self.regime_detector.is_counter_trend(direction)
-        is_aligned_trend = self.regime_detector.is_aligned_trend(direction)
-
+        # Apply trend alignment factors to ROI
         factor = 1.0
         if is_counter_trend:
             factor = self.config.counter_trend_factor
@@ -107,13 +48,34 @@ class ROICalculator:
         else:
             final_roi = base_roi
 
-        log_roi_calculation(
-            direction=direction,
-            base_roi=base_roi,
-            is_counter_trend=is_counter_trend,
-            is_aligned_trend=is_aligned_trend,
-            factor=factor,
-            final_roi=final_roi
-        )
-
         return final_roi
+
+    def update_roi_cache(self, current_timestamp: int, win_rates: dict,
+                         is_counter_trend_fn, is_aligned_trend_fn, calculate_dynamic_stoploss_fn) -> None:
+        """
+        Update cached ROI values if needed
+
+        Args:
+            current_timestamp: Current time as unix timestamp
+            win_rates: Dictionary with win rates for 'long' and 'short'
+            is_counter_trend_fn: Function to check if trade is counter-trend
+            is_aligned_trend_fn: Function to check if trade is aligned with trend
+            calculate_dynamic_stoploss_fn: Function to calculate dynamic stoploss
+        """
+        # Check if cache needs updating
+        if (current_timestamp - self.roi_cache['last_updated']) > self.config.roi_cache_update_interval:
+            # Update ROI values for both directions
+            for direction in ['long', 'short']:
+                # Calculate stoploss based on win rate and trend alignment
+                win_rate = win_rates[direction]
+                is_counter_trend = is_counter_trend_fn(direction)
+                is_aligned_trend = is_aligned_trend_fn(direction)
+
+                stoploss = calculate_dynamic_stoploss_fn(win_rate, is_counter_trend, is_aligned_trend)
+
+                # Calculate ROI from stoploss
+                self.roi_cache[direction] = self.calculate_roi_from_stoploss(
+                    stoploss, is_counter_trend, is_aligned_trend)
+
+            # Update timestamp
+            self.roi_cache['last_updated'] = current_timestamp

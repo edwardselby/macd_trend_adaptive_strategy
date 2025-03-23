@@ -152,8 +152,9 @@ class StrategyConfig:
         # Core settings - these will be overridden by config
         self.risk_reward_ratio = "1:2"
         self.risk_reward_ratio_str = "1:2"
-        self.min_roi = 0.025
-        self.max_roi = 0.055
+        # Invert the primary parameters to be stoploss first
+        self.min_stoploss = -0.015  # Less negative, tighter stoploss
+        self.max_stoploss = -0.03  # More negative, wider stoploss
 
     def _load_user_config(self, config_path: str) -> bool:
         """
@@ -226,35 +227,43 @@ class StrategyConfig:
             logger.error(f"Error setting configuration parameter {key}: {e}")
 
     def _parse_risk_reward_ratio(self) -> None:
-        """Parse risk:reward ratio string (e.g. "1:1.5") to numeric value"""
+        """Parse risk:reward ratio string (e.g. "1:2") to numeric value"""
         try:
             risk, reward = self.risk_reward_ratio.split(':')
             risk_value = float(risk.strip())
             reward_value = float(reward.strip())
 
+            # Store the original string
+            self.risk_reward_ratio_str = self.risk_reward_ratio
+
             # Calculate risk/reward ratio as a decimal
-            # Store both the string and float versions
-            self.risk_reward_ratio_str = self.risk_reward_ratio  # Save the original string
-            self.risk_reward_ratio_float = risk_value / reward_value
+            # INVERTED: Now reward to risk (this will be used to multiply stoploss to get ROI)
+            self.risk_reward_ratio_float = reward_value / risk_value
 
         except Exception as e:
             logger.error(f"Error parsing risk:reward ratio '{self.risk_reward_ratio}': {e}")
-            logger.info("Using default risk:reward ratio of 1:2 (0.5)")
-            self.risk_reward_ratio_float = 0.5  # Default 1:2
+            logger.info("Using default risk:reward ratio of 1:2 (2.0)")
+            self.risk_reward_ratio_float = 2.0  # Default 1:2 but inverted
 
     def _calculate_derived_parameters(self) -> None:
         """Calculate all derived parameters from the base parameters"""
-
-        # Base ROI is the average of min and max ROI
-        self.base_roi = (self.min_roi + self.max_roi) / 2
-
-        # Stoploss calculations based on ROI and risk:reward ratio
-        # Stoploss values are negative
-        self.min_stoploss = -1 * self.min_roi * self.risk_reward_ratio_float
-        self.max_stoploss = -1 * self.max_roi * self.risk_reward_ratio_float
-
-        # Store risk_reward_ratio as float in the traditional attribute name for compatibility
+        # Store risk_reward_ratio as float in the traditional attribute for compatibility
         self.risk_reward_ratio = self.risk_reward_ratio_float
+
+        # Ensure stoploss values are properly ordered (min should be less negative than max)
+        if self.min_stoploss < self.max_stoploss:
+            # Swap them if they're reversed
+            self.min_stoploss, self.max_stoploss = self.max_stoploss, self.min_stoploss
+            logger.warning("Swapped min_stoploss and max_stoploss to maintain correct ordering")
+
+        # Base stoploss is the average
+        self.base_stoploss = (self.min_stoploss + self.max_stoploss) / 2
+
+        # Calculate ROI values based on stoploss and risk:reward ratio
+        # Stoploss values are negative, so we take the absolute value
+        self.min_roi = abs(self.min_stoploss) * self.risk_reward_ratio_float
+        self.max_roi = abs(self.max_stoploss) * self.risk_reward_ratio_float
+        self.base_roi = (self.min_roi + self.max_roi) / 2
 
         # For backward compatibility with existing code
         # Make static_stoploss more negative than max_stoploss (20% more negative)

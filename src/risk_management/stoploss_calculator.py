@@ -1,32 +1,28 @@
 import logging
 
-from ..regime.detector import RegimeDetector
-from ..utils.log_messages import log_stoploss_calculation, log_stoploss_price
-
 logger = logging.getLogger(__name__)
 
 
 class StoplossCalculator:
-    """Calculates dynamic stoploss values based on ROI and risk parameters"""
+    """Calculates dynamic stoploss values based on win rates and risk parameters"""
 
-    def __init__(self, regime_detector: RegimeDetector, config):
+    def __init__(self, config):
         """
-        Initialize with regime detector and configuration
+        Initialize with configuration only
 
         Args:
-            regime_detector: For market regime information
             config: Strategy configuration with stoploss parameters
         """
-        self.regime_detector = regime_detector
         self.config = config
 
-    def calculate_dynamic_stoploss(self, roi: float, direction: str) -> float:
+    def calculate_dynamic_stoploss(self, win_rate: float, is_counter_trend: bool, is_aligned_trend: bool) -> float:
         """
-        Calculate dynamic stoploss based on ROI and risk-reward ratio.
+        Calculate dynamic stoploss based on win rate and trend alignment.
 
         Args:
-            roi: The target ROI value for this trade
-            direction: Trade direction ('long' or 'short')
+            win_rate: Current win rate for the trade direction
+            is_counter_trend: Whether the trade is counter to market regime
+            is_aligned_trend: Whether the trade aligns with market regime
 
         Returns:
             float: The calculated stoploss value (negative number representing percentage)
@@ -40,12 +36,16 @@ class StoplossCalculator:
                 # Calculate a fallback stoploss that's more negative than max_stoploss
                 return self.config.max_stoploss * 1.2
 
-        # Base stoploss calculation using risk_reward_ratio
-        # If ROI is 3% and risk_reward_ratio is 0.67 (1:1.5), stoploss would be -2%
-        base_stoploss = -1 * roi * self.config.risk_reward_ratio
-        is_counter_trend = self.regime_detector.is_counter_trend(direction)
-        is_aligned_trend = self.regime_detector.is_aligned_trend(direction)
+        # Normalize win rate to 0-1 range for scaling
+        normalized_wr = max(0, min(1, (win_rate - self.config.min_win_rate) /
+                                   (self.config.max_win_rate - self.config.min_win_rate)))
 
+        # Higher win rate = closer to max_stoploss (more negative, wider)
+        # Lower win rate = closer to min_stoploss (less negative, tighter)
+        base_stoploss = self.config.min_stoploss + normalized_wr * (
+                self.config.max_stoploss - self.config.min_stoploss)
+
+        # Apply trend alignment factors
         factor = 1.0
         if is_counter_trend:
             factor = self.config.counter_trend_stoploss_factor
@@ -56,13 +56,9 @@ class StoplossCalculator:
         else:
             adjusted_stoploss = base_stoploss
 
-        # IMPORTANT: Ensure stoploss is always negative regardless of direction
+        # IMPORTANT: Ensure stoploss is always negative
         if adjusted_stoploss >= 0:
             adjusted_stoploss = self.config.min_stoploss  # Use minimum stoploss as fallback
-
-        # For stoploss (negative values):
-        # -0.01 (min_stoploss) is the smallest loss allowed (closest to zero)
-        # -0.05 (max_stoploss) is the largest loss allowed (furthest from zero)
 
         # Bound the stoploss within min and max limits
         if adjusted_stoploss > self.config.min_stoploss:
@@ -75,51 +71,16 @@ class StoplossCalculator:
             # Within acceptable range
             final_stoploss = adjusted_stoploss
 
-        log_stoploss_calculation(
-            direction=direction,
-            roi=roi,
-            risk_ratio=self.config.risk_reward_ratio,
-            base_sl=base_stoploss,
-            is_counter_trend=is_counter_trend,
-            is_aligned_trend=is_aligned_trend,
-            factor=factor,
-            adjusted_sl=adjusted_stoploss,
-            min_sl=self.config.min_stoploss,
-            max_sl=self.config.max_stoploss,
-            final_sl=final_stoploss
-        )
-
         return final_stoploss
 
     def calculate_stoploss_price(self, entry_rate: float, stoploss: float, is_short: bool) -> float:
-        """
-        Calculate the absolute stoploss price based on entry rate and stoploss percentage
-
-        Args:
-            entry_rate: Entry price of the trade
-            stoploss: Stoploss value as a negative decimal (e.g., -0.05 for 5%)
-            is_short: Whether this is a short trade
-
-        Returns:
-            float: Absolute price level for the stoploss
-        """
+        """Original calculate_stoploss_price method - unchanged"""
         if is_short:
             # For short trades, stoploss is reached when price goes UP
-            # If entry is 100 and stoploss is -0.05 (5%), stoploss price is 105
             stoploss_price = entry_rate * (1 - stoploss)  # Note the subtraction of negative number = addition
         else:
             # For long trades, stoploss is reached when price goes DOWN
-            # If entry is 100 and stoploss is -0.05 (5%), stoploss price is 95
             stoploss_price = entry_rate * (1 + stoploss)
-
-        direction = "short" if is_short else "long"
-
-        log_stoploss_price(
-            direction=direction,
-            entry_price=entry_rate,
-            stoploss_pct=stoploss,
-            stoploss_price=stoploss_price
-        )
 
         return stoploss_price
 

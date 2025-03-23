@@ -96,45 +96,38 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         self.db_handler.set_strategy_name(self.__class__.__name__)
 
         self.is_backtest = (
-            config.get('runmode') in ('backtest', 'hyperopt') or
-            config.get('backtest', False) or
-            'timerange' in config or
-            'export' in config
+                config.get('runmode') in ('backtest', 'hyperopt') or
+                config.get('backtest', False) or
+                'timerange' in config or
+                'export' in config
         )
 
         if self.is_backtest:
             self.db_handler.clear_performance_data()
 
-        # Use dependency injection for easier testing and configuration
+        # Performance tracking - needed for win rates
         self.performance_tracker = PerformanceTracker(
             self.db_handler,
             max_recent_trades=self.strategy_config.max_recent_trades
         )
 
-        # Components initialized with config object
+        # Regime detection - only depends on performance tracker
         self.regime_detector = RegimeDetector(
             self.performance_tracker,
             self.strategy_config
         )
 
-        self.roi_calculator = ROICalculator(
-            self.performance_tracker,
-            self.regime_detector,
-            self.strategy_config
-        )
-
-        self.stoploss_calculator = StoplossCalculator(
-            self.regime_detector,
-            self.strategy_config
-        )
+        # Simplified calculators with fewer dependencies
+        self.stoploss_calculator = StoplossCalculator(self.strategy_config)
+        self.roi_calculator = ROICalculator(self.strategy_config)
 
         # Simplified trade cache initialization
         self.trade_cache = {'active_trades': {}}
 
-        # Use the already calculated static_stoploss as the strategy stoploss
+        # Use the static stoploss as the strategy stoploss
         self.stoploss = self.strategy_config.static_stoploss
 
-        # Use the already calculated default_roi as the minimal_roi
+        # Use the default_roi as the minimal_roi
         self.minimal_roi = {"0": self.strategy_config.default_roi}
 
         # Determine display mode for logging
@@ -381,20 +374,35 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         # Otherwise, create new cache entry
         direction = get_direction(is_short)
 
-        # Update ROI cache if needed
+        # Get current timestamp
         current_timestamp = int(open_date.timestamp())
-        self.roi_calculator.update_roi_cache(current_timestamp)
 
-        # Get ROI for this trade
-        roi = self.roi_calculator.get_trade_roi(direction)
+        # Get win rates for ROI calculation
+        win_rates = {
+            'long': self.performance_tracker.get_recent_win_rate('long'),
+            'short': self.performance_tracker.get_recent_win_rate('short')
+        }
 
-        # Calculate dynamic stoploss
-        stoploss = self.stoploss_calculator.calculate_dynamic_stoploss(roi, direction)
-
-        # Get regime info
+        # Get regime info for current trade
         regime = self.regime_detector.detect_regime()
         is_counter_trend = self.regime_detector.is_counter_trend(direction)
         is_aligned_trend = self.regime_detector.is_aligned_trend(direction)
+
+        # Update ROI cache if needed
+        self.roi_calculator.update_roi_cache(
+            current_timestamp,
+            win_rates,
+            self.regime_detector.is_counter_trend,
+            self.regime_detector.is_aligned_trend,
+            self.stoploss_calculator.calculate_dynamic_stoploss
+        )
+
+        # Calculate stoploss for this specific trade
+        stoploss = self.stoploss_calculator.calculate_dynamic_stoploss(
+            win_rates[direction], is_counter_trend, is_aligned_trend)
+
+        # Get cached ROI or calculate directly if needed
+        roi = self.roi_calculator.roi_cache[direction]
 
         # Calculate stoploss price
         try:
