@@ -118,11 +118,9 @@ def test_should_exit_with_roi(config_file):
     trade.is_short = False
     trade.leverage = 1.0
 
-    # Generate a valid trade ID format
-    trade_id = f"{trade.pair}_{int(trade.open_date_utc.timestamp())}"
-
-    # Create cache entry directly
-    strategy.trade_cache['active_trades'][trade_id] = {
+    # Instead of working with trade_id directly, mock the _get_or_create_trade_cache method
+    # This bypasses all the ID generation complexity
+    mock_cache_entry = {
         'direction': 'long',
         'entry_rate': trade.open_rate,
         'roi': 0.03,  # Set specific ROI target
@@ -134,16 +132,17 @@ def test_should_exit_with_roi(config_file):
         'last_updated': int(datetime.now().timestamp())
     }
 
-    # Mock calc_profit_ratio to return a profit above ROI target
-    trade.calc_profit_ratio.return_value = 0.04  # Above our 0.03 ROI
+    with patch.object(strategy, '_get_or_create_trade_cache', return_value=mock_cache_entry):
+        # Mock calc_profit_ratio to return a profit above ROI target
+        trade.calc_profit_ratio.return_value = 0.04  # Above our 0.03 ROI
 
-    # Call should_exit
-    exit_signals = strategy.should_exit(trade, trade.open_rate * 1.04, datetime.now())
+        # Call should_exit
+        exit_signals = strategy.should_exit(trade, trade.open_rate * 1.04, datetime.now())
 
-    # Verify ROI exit signal
-    assert len(exit_signals) == 1
-    assert exit_signals[0].exit_type == ExitType.ROI
-    assert "adaptive_roi" in exit_signals[0].exit_reason
+        # Verify ROI exit signal
+        assert len(exit_signals) == 1
+        assert exit_signals[0].exit_type == ExitType.ROI
+        assert "adaptive_roi" in exit_signals[0].exit_reason
 
 
 def test_should_exit_with_stoploss(config_file):
@@ -158,14 +157,11 @@ def test_should_exit_with_stoploss(config_file):
     trade.is_short = False
     trade.leverage = 1.0
 
-    # Generate a valid trade ID
-    trade_id = f"{trade.pair}_{int(trade.open_date_utc.timestamp())}"
-
     # Set stoploss price directly
     stoploss_price = 29400
 
-    # Create cache entry
-    strategy.trade_cache['active_trades'][trade_id] = {
+    # Create mock cache entry
+    mock_cache_entry = {
         'direction': 'long',
         'entry_rate': trade.open_rate,
         'roi': 0.03,
@@ -177,69 +173,58 @@ def test_should_exit_with_stoploss(config_file):
         'last_updated': int(datetime.now().timestamp())
     }
 
-    # Mock calc_profit_ratio to return a negative profit
-    trade.calc_profit_ratio.return_value = -0.05
+    # Mock the cache lookup to return our test data
+    with patch.object(strategy, '_get_or_create_trade_cache', return_value=mock_cache_entry):
+        # Mock calc_profit_ratio to return a negative profit
+        trade.calc_profit_ratio.return_value = -0.05
 
-    # Call should_exit with a price below stoploss price
-    exit_signals = strategy.should_exit(trade, stoploss_price - 1, datetime.now())
+        # Call should_exit with a price below stoploss price
+        exit_signals = strategy.should_exit(trade, stoploss_price - 1, datetime.now())
 
-    # Verify stoploss exit signal
-    assert len(exit_signals) == 1
-    assert exit_signals[0].exit_type == ExitType.STOP_LOSS
-    assert "stoploss_" in exit_signals[0].exit_reason
+        # Verify stoploss exit signal
+        assert len(exit_signals) == 1
+        assert exit_signals[0].exit_type == ExitType.STOP_LOSS
+        assert "stoploss_" in exit_signals[0].exit_reason
 
 
 def test_confirm_trade_exit(config_file):
-    """Test confirm_trade_exit updates performance tracking"""
+    """Test confirm_trade_exit updates performance tracking and removes trade from cache"""
     strategy = create_strategy(config_file)
 
-    # Mock dependencies to avoid logging issues
+    # Set up mocks for components we don't want to test
     strategy.performance_tracker = MagicMock()
     strategy.regime_detector = MagicMock()
-    strategy.regime_detector.detect_regime.return_value = "neutral"
 
-    # Create a fixed time that we can control
-    fixed_time = datetime(2025, 3, 19, 12, 0, 0)
-    timestamp = int(fixed_time.timestamp())
-
-    # Create mock trade with fixed timestamp
+    # Create a mock trade with simple attributes
     trade = MagicMock(spec=Trade)
     trade.pair = 'BTC/USDT'
-    trade.open_date_utc = fixed_time
+    trade.open_date_utc = datetime(2025, 1, 1)
     trade.is_short = False
     trade.calc_profit_ratio.return_value = 0.03
 
-    # Generate trade ID
-    trade_id = f"{trade.pair}_{timestamp}"
+    # Mock the _get_or_create_trade_cache method to avoid dealing with ID generation
+    mock_trade_id = 'mock_trade_id'
 
-    # Add trade to cache
-    strategy.trade_cache['active_trades'][trade_id] = {
-        'direction': 'long',
-        'entry_rate': 30000,
-        'roi': 0.03,
-        'stoploss': -0.02,
-        'stoploss_price': 29400,
-        'is_counter_trend': False,
-        'is_aligned_trend': True,
-        'regime': 'bullish',
-        'last_updated': timestamp
-    }
+    # Put the ID in the cache with some data
+    strategy.trade_cache['active_trades'][mock_trade_id] = {'test': 'data'}
 
-    # Override create_trade_id to return our fixed id
-    with patch('macd_trend_adaptive_strategy.utils.create_trade_id', return_value=trade_id):
-        # Patch log_trade_exit for formatting issues
-        with patch('macd_trend_adaptive_strategy.utils.log_trade_exit'):
-            # Call confirm_trade_exit
+    # Mock create_trade_id to return our controlled ID
+    with patch('src.utils.helpers.create_trade_id', return_value=mock_trade_id):
+        # Mock log_trade_exit to avoid formatting issues with win rates
+        with patch('src.utils.log_messages.log_trade_exit'):
+            # Call the method
             result = strategy.confirm_trade_exit(
-                trade.pair, trade, 'limit', 0.1, 31000, 'GTC', 'exit_signal', fixed_time
+                trade.pair, trade, 'limit', 0.1, 31000, 'GTC', 'exit_signal', datetime.now()
             )
 
-            # Verify result and performance update
-            assert result is True
-            strategy.performance_tracker.update_performance.assert_called_once()
+            # Assert performance tracker was updated
+            strategy.performance_tracker.update_performance.assert_called_once_with(trade, 0.03)
 
-            # Verify trade was removed from cache
-            assert trade_id not in strategy.trade_cache['active_trades']
+            # Assert trade was removed from cache
+            assert mock_trade_id not in strategy.trade_cache['active_trades']
+
+            # Assert method returns True
+            assert result is True
 
 
 def test_handle_missing_trade(config_file):

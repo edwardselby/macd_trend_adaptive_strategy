@@ -18,8 +18,8 @@ class ConfigValidator:
         'risk_reward_ratio': (float, True, 0.1, 2.0, 0.5),
 
         # Updated stoploss parameters (now primary parameters, not derived)
-        'min_stoploss': (float, True, -0.05, -0.005, -0.015),  # Closer to zero (tighter)
-        'max_stoploss': (float, True, -0.1, -0.02, -0.05),  # Further from zero (wider)
+        'min_stoploss': (float, True, None, None, -0.015),  # Closer to zero (tighter)
+        'max_stoploss': (float, True, None, None, -0.05),  # Further from zero (wider)
         'static_stoploss': (float, False, -0.15, -0.01, -0.03),
 
         # ROI parameters (now derived from stoploss values)

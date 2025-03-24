@@ -152,7 +152,6 @@ class StrategyConfig:
         # Core settings - these will be overridden by config
         self.risk_reward_ratio = "1:2"
         self.risk_reward_ratio_str = "1:2"
-        # Invert the primary parameters to be stoploss first
         self.min_stoploss = -0.015  # Less negative, tighter stoploss
         self.max_stoploss = -0.03  # More negative, wider stoploss
 

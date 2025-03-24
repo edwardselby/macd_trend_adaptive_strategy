@@ -88,8 +88,8 @@ def test_fallback_stoploss(stoploss_calculator):
     stoploss_calculator.config.use_dynamic_stoploss = False
     stoploss_calculator.config.static_stoploss = -0.06
 
-    # Call the method with any ROI value
-    stoploss = stoploss_calculator.calculate_dynamic_stoploss(0.05, "long")
+    # Call the method with all three required arguments
+    stoploss = stoploss_calculator.calculate_dynamic_stoploss(0.05, False, False)
 
     # Should return the static stoploss
     assert stoploss == stoploss_calculator.config.static_stoploss
