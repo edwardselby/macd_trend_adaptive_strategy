@@ -1,8 +1,9 @@
 import json
 import os
 import tempfile
-import pytest
 from unittest.mock import patch, mock_open
+
+import pytest
 
 from src.config.strategy_config import StrategyConfig, StrategyMode
 

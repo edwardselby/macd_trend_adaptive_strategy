@@ -1,6 +1,6 @@
-from tests.conftest import set_market_state, cleanup_patchers
-
 import pytest
+
+from tests.conftest import set_market_state, cleanup_patchers
 
 
 @pytest.mark.parametrize(

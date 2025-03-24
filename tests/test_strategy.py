@@ -7,10 +7,9 @@ from unittest.mock import patch, MagicMock, ANY
 import pytest
 from freqtrade.enums.exittype import ExitType
 from freqtrade.persistence import Trade
-
-from src.config.strategy_config import StrategyMode
 from macd_trend_adaptive_strategy import MACDTrendAdaptiveStrategy
 
+from src.config.strategy_config import StrategyMode
 from src.regime.detector import RegimeDetector
 from tests.conftest import set_market_state, cleanup_patchers
 
