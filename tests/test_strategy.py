@@ -1,4 +1,3 @@
-# test_strategy.py (restructured)
 import json
 import os
 import tempfile
