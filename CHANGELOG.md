@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-03-23
+
 ### Changed
 - Completely inverted the risk management approach to be more intuitive:
   - Stoploss values are now the primary parameters (min_stoploss, max_stoploss)
