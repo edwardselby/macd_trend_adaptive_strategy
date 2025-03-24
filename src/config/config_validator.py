@@ -10,15 +10,22 @@ class ConfigValidator:
     Ensures all required parameters are present and have appropriate values.
     """
 
-    # Parameter definitions with types and validation constraints
     PARAMETER_DEFINITIONS = {
         # Format: 'parameter_name': (type, required, min_value, max_value, default)
         # Core parameters
         'timeframe': (str, True, None, None, '15m'),
         'risk_reward_ratio_str': (str, True, None, None, '1:2'),
         'risk_reward_ratio': (float, True, 0.1, 2.0, 0.5),
-        'min_roi': (float, True, 0.005, 0.2, 0.025),
-        'max_roi': (float, True, 0.01, 0.3, 0.055),
+
+        # Updated stoploss parameters (now primary parameters, not derived)
+        'min_stoploss': (float, True, -0.05, -0.005, -0.015),  # Closer to zero (tighter)
+        'max_stoploss': (float, True, -0.1, -0.02, -0.05),  # Further from zero (wider)
+        'static_stoploss': (float, False, -0.15, -0.01, -0.03),
+
+        # ROI parameters (now derived from stoploss values)
+        'min_roi': (float, False, None, None, None),  # Now derived
+        'max_roi': (float, False, None, None, None),  # Now derived
+        'default_roi': (float, False, 0.01, 0.1, 0.04),
 
         # MACD parameters
         'fast_length': (int, True, 2, 50, 12),
@@ -40,7 +47,6 @@ class ConfigValidator:
         # Other parameters
         'use_dynamic_stoploss': (bool, True, None, None, True),
         'use_default_roi_exit': (bool, False, None, None, False),
-        'default_roi': (float, False, 0.01, 0.1, 0.04),
         'long_roi_boost': (float, False, 0.0, 0.05, 0.0),
         'min_win_rate': (float, True, 0.1, 0.5, 0.2),
         'max_win_rate': (float, True, 0.5, 0.9, 0.8),
@@ -50,11 +56,8 @@ class ConfigValidator:
         'startup_candle_count': (int, True, 10, 200, 30),
         'roi_cache_update_interval': (int, True, 10, 3600, 60),
 
-        # Derived parameters (calculated, not directly configured)
+        # Still a derived parameter
         'base_roi': (float, False, None, None, None),
-        'min_stoploss': (float, False, None, None, None),
-        'max_stoploss': (float, False, None, None, None),
-        'static_stoploss': (float, False, None, None, None),
     }
 
     @classmethod

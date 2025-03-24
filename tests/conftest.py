@@ -22,8 +22,8 @@ def mock_config_file():
     config_data = {
         "1m": {
             "risk_reward_ratio": "1:1.5",
-            "min_roi": 0.015,
-            "max_roi": 0.035,
+            "min_stoploss": -0.01,      # Closer to zero (tighter)
+            "max_stoploss": -0.03,      # Further from zero (wider)
             "fast_length": 6,
             "slow_length": 14,
             "signal_length": 4,
@@ -34,8 +34,8 @@ def mock_config_file():
         },
         "5m": {
             "risk_reward_ratio": "1:2",
-            "min_roi": 0.025,
-            "max_roi": 0.055,
+            "min_stoploss": -0.0125,    # Closer to zero (tighter)
+            "max_stoploss": -0.0275,    # Further from zero (wider)
             "fast_length": 12,
             "slow_length": 26,
             "signal_length": 9,
@@ -46,8 +46,8 @@ def mock_config_file():
         },
         "15m": {
             "risk_reward_ratio": "1:2",
-            "min_roi": 0.025,
-            "max_roi": 0.055,
+            "min_stoploss": -0.0125,    # Closer to zero (tighter)
+            "max_stoploss": -0.0275,    # Further from zero (wider)
             "fast_length": 12,
             "slow_length": 26,
             "signal_length": 9,

@@ -31,8 +31,8 @@ def test_strategy_config_from_valid_file():
     config_data = {
         "15m": {
             "risk_reward_ratio": "1:2",
-            "min_roi": 0.025,
-            "max_roi": 0.055,
+            "min_stoploss": -0.0125,    # Closer to zero (tighter)
+            "max_stoploss": -0.0275,    # Further from zero (wider)
             "fast_length": 12,
             "slow_length": 26,
             "signal_length": 9,
@@ -54,8 +54,16 @@ def test_strategy_config_from_valid_file():
         # Check that values were loaded correctly
         assert config.timeframe == '15m'
         assert config.risk_reward_ratio_str == "1:2"
-        assert config.min_roi == 0.025
-        assert config.max_roi == 0.055
+
+        # Check stoploss values (primary parameters)
+        assert config.min_stoploss == -0.0125
+        assert config.max_stoploss == -0.0275
+
+        # Check derived ROI values
+        expected_min_roi = abs(config.min_stoploss) * 2.0  # Using risk_reward_ratio 1:2
+        expected_max_roi = abs(config.max_stoploss) * 2.0  # Using risk_reward_ratio 1:2
+        assert abs(config.min_roi - expected_min_roi) < 0.0001
+        assert abs(config.max_roi - expected_max_roi) < 0.0001
         assert config.fast_length == 12
         assert config.slow_length == 26
         assert config.signal_length == 9
@@ -75,13 +83,13 @@ def test_strategy_config_timeframe_specific_settings():
     config_data = {
         "5m": {
             "risk_reward_ratio": "1:3",
-            "min_roi": 0.03,
-            "max_roi": 0.06
+            "min_stoploss": -0.01,  # Closer to zero (tighter)
+            "max_stoploss": -0.02  # Further from zero (wider)
         },
         "15m": {
             "risk_reward_ratio": "1:2",
-            "min_roi": 0.025,
-            "max_roi": 0.055
+            "min_stoploss": -0.0125,  # Closer to zero (tighter)
+            "max_stoploss": -0.0275  # Further from zero (wider)
         }
     }
 
@@ -96,8 +104,14 @@ def test_strategy_config_timeframe_specific_settings():
         # Check that 5m values were loaded correctly
         assert config_5m.timeframe == '5m'
         assert config_5m.risk_reward_ratio_str == "1:3"
-        assert config_5m.min_roi == 0.03
-        assert config_5m.max_roi == 0.06
+        assert config_5m.min_stoploss == -0.01
+        assert config_5m.max_stoploss == -0.02
+
+        # Check derived ROI values
+        expected_min_roi = abs(config_5m.min_stoploss) * 3.0  # risk_reward_ratio 1:3
+        expected_max_roi = abs(config_5m.max_stoploss) * 3.0  # risk_reward_ratio 1:3
+        assert abs(config_5m.min_roi - expected_min_roi) < 0.0001
+        assert abs(config_5m.max_roi - expected_max_roi) < 0.0001
 
         # Test with 15m mode
         config_15m = StrategyConfig(mode=StrategyMode.TIMEFRAME_15M, config_path=temp_file_path)
@@ -105,8 +119,14 @@ def test_strategy_config_timeframe_specific_settings():
         # Check that 15m values were loaded correctly
         assert config_15m.timeframe == '15m'
         assert config_15m.risk_reward_ratio_str == "1:2"
-        assert config_15m.min_roi == 0.025
-        assert config_15m.max_roi == 0.055
+        assert config_15m.min_stoploss == -0.0125
+        assert config_15m.max_stoploss == -0.0275
+
+        # Check derived ROI values
+        expected_min_roi = abs(config_15m.min_stoploss) * 2.0  # risk_reward_ratio 1:2
+        expected_max_roi = abs(config_15m.max_stoploss) * 2.0  # risk_reward_ratio 1:2
+        assert abs(config_15m.min_roi - expected_min_roi) < 0.0001
+        assert abs(config_15m.max_roi - expected_max_roi) < 0.0001
 
     finally:
         # Clean up the temporary file
@@ -123,8 +143,8 @@ def test_strategy_config_global_settings():
         },
         "global": {
             "risk_reward_ratio": "1:2",
-            "min_roi": 0.025,
-            "max_roi": 0.055,
+            "min_stoploss": -0.0125,  # Closer to zero (tighter)
+            "max_stoploss": -0.0275,  # Further from zero (wider)
             "counter_trend_factor": 0.5,
             "aligned_trend_factor": 1.0
         }
@@ -143,8 +163,17 @@ def test_strategy_config_global_settings():
         assert config.fast_length == 5
         assert config.slow_length == 15
         assert config.risk_reward_ratio_str == "1:2"
-        assert config.min_roi == 0.025
-        assert config.max_roi == 0.055
+
+        # Check stoploss values
+        assert config.min_stoploss == -0.0125
+        assert config.max_stoploss == -0.0275
+
+        # Check derived ROI values
+        expected_min_roi = abs(config.min_stoploss) * 2.0  # Using risk_reward_ratio 1:2
+        expected_max_roi = abs(config.max_stoploss) * 2.0  # Using risk_reward_ratio 1:2
+        assert abs(config.min_roi - expected_min_roi) < 0.0001
+        assert abs(config.max_roi - expected_max_roi) < 0.0001
+
         assert config.counter_trend_factor == 0.5
         assert config.aligned_trend_factor == 1.0
 
