@@ -1,0 +1,147 @@
+# MACD Trend Adaptive Strategy Configuration
+# ===========================================
+#
+# This configuration file controls the behavior of the MACD Trend Adaptive Strategy.
+# Each timeframe section contains settings optimized for that specific timeframe.
+# The "global" section contains settings that apply to all timeframes unless overridden.
+
+# Global settings (applied to all timeframes)
+global:
+  # Risk adjustment factors
+  counter_trend_factor: 0.5           # Factor applied to ROI for counter-trend trades (lower = take profits sooner)
+  aligned_trend_factor: 1.0           # Factor applied to ROI for trend-aligned trades 
+  counter_trend_stoploss_factor: 0.5  # Factor applied to stoploss for counter-trend trades (lower = tighter stoploss)
+  aligned_trend_stoploss_factor: 1.0  # Factor applied to stoploss for trend-aligned trades
+  
+  # Strategy behavior settings
+  use_dynamic_stoploss: true          # Whether to use dynamic stoploss or static stoploss
+  min_win_rate: 0.2                   # Minimum win rate for ROI normalization
+  max_win_rate: 0.8                   # Maximum win rate for ROI normalization
+  regime_win_rate_diff: 0.2           # Minimum win rate difference to determine market regime
+  min_recent_trades_per_direction: 5  # Minimum number of trades required to detect market regime
+  max_recent_trades: 10               # Maximum number of recent trades to track for performance metrics
+  
+  # Other settings
+  startup_candle_count: 50            # Number of warmup candles required
+  roi_cache_update_interval: 60       # Seconds between ROI cache updates
+
+# 1-minute timeframe configuration
+1m:
+  # Risk parameters
+  risk_reward_ratio: 1:2.5            # Risk to reward ratio as "1:X" string
+  min_stoploss: -0.015                # Closer to zero (tighter stoploss)
+  max_stoploss: -0.025                # Further from zero (wider stoploss)
+  static_stoploss: -0.03              # Fallback stoploss value
+  
+  # MACD parameters
+  fast_length: 12                     # Fast EMA period for MACD
+  slow_length: 36                     # Slow EMA period for MACD
+  signal_length: 12                   # Signal line period for MACD
+  
+  # Trend detection parameters
+  adx_period: 36                      # Period for ADX indicator
+  adx_threshold: 60                   # Minimum ADX value to consider a strong trend
+  ema_fast: 12                        # Fast EMA period for trend detection
+  ema_slow: 55                        # Slow EMA period for trend detection
+  
+  # Risk factors (override globals)
+  counter_trend_factor: 0.3           # More conservative for 1m timeframe
+  aligned_trend_factor: 0.6           # More conservative for 1m timeframe
+  counter_trend_stoploss_factor: 0.2  # Tighter stoplosses for 1m timeframe
+  aligned_trend_stoploss_factor: 0.25 # Tighter stoplosses for 1m timeframe
+  
+  # Regime detection parameters
+  min_win_rate: 0.45                  # Higher minimum win rate for 1m timeframe
+  max_win_rate: 0.65                  # Lower maximum win rate for 1m timeframe
+  regime_win_rate_diff: 0.7           # Higher difference needed for regime detection
+  min_recent_trades_per_direction: 30 # More trades required for regime detection
+
+# 5-minute timeframe configuration
+5m:
+  risk_reward_ratio: 1:4
+  min_stoploss: -0.0088
+  max_stoploss: -0.0175
+  fast_length: 5
+  slow_length: 26
+  signal_length: 8
+  adx_period: 24
+  adx_threshold: 42
+  ema_fast: 5
+  ema_slow: 28
+  counter_trend_factor: 0.9
+  aligned_trend_factor: 1.7
+  counter_trend_stoploss_factor: 0.9
+  aligned_trend_stoploss_factor: 1.7
+  min_win_rate: 0.2
+  max_win_rate: 0.7
+  regime_win_rate_diff: 0.35
+  min_recent_trades_per_direction: 6
+  max_recent_trades: 9
+
+# 15-minute timeframe configuration
+15m:
+  risk_reward_ratio: 1:2.5
+  min_stoploss: -0.02
+  max_stoploss: -0.045
+  fast_length: 12
+  slow_length: 26
+  signal_length: 9
+  adx_period: 14
+  adx_threshold: 22
+  ema_fast: 8
+  ema_slow: 21
+  counter_trend_factor: 0.6
+  aligned_trend_factor: 1.2
+  counter_trend_stoploss_factor: 0.6
+  aligned_trend_stoploss_factor: 1.2
+  min_win_rate: 0.2
+  max_win_rate: 0.8
+  regime_win_rate_diff: 0.25
+  min_recent_trades_per_direction: 5
+  max_recent_trades: 10
+
+# 30-minute timeframe configuration
+30m:
+  risk_reward_ratio: 1:2.75
+  min_stoploss: -0.0058
+  max_stoploss: -0.0138
+  fast_length: 18
+  slow_length: 40
+  signal_length: 12
+  adx_period: 28
+  adx_threshold: 44
+  ema_fast: 16
+  ema_slow: 48
+  counter_trend_factor: 0.7
+  aligned_trend_factor: 1.3
+  counter_trend_stoploss_factor: 0.7
+  aligned_trend_stoploss_factor: 1.3
+  min_win_rate: 0.2
+  max_win_rate: 0.8
+  regime_win_rate_diff: 0.12
+  min_recent_trades_per_direction: 2
+  max_recent_trades: 12
+  startup_candle_count: 40
+  roi_cache_update_interval: 150
+
+# 1-hour timeframe configuration
+1h:
+  risk_reward_ratio: 1:3
+  min_stoploss: -0.0117
+  max_stoploss: -0.025
+  fast_length: 16
+  slow_length: 32
+  signal_length: 12
+  adx_period: 20
+  adx_threshold: 25
+  ema_fast: 12
+  ema_slow: 34
+  counter_trend_factor: 0.7
+  aligned_trend_factor: 1.4
+  counter_trend_stoploss_factor: 0.7
+  aligned_trend_stoploss_factor: 1.4
+  min_win_rate: 0.2
+  max_win_rate: 0.8
+  regime_win_rate_diff: 0.15
+  min_recent_trades_per_direction: 3
+  max_recent_trades: 15
