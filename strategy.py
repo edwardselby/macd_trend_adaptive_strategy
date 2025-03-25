@@ -73,7 +73,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         super().__init__(config)
 
         # Path to the configuration file
-        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strategy_config.json")
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strategy_config.yaml")
         if not os.path.exists(config_path):
             raise ValueError(
                 f"Configuration file not found at {config_path}. "

@@ -29,8 +29,9 @@ def test_strategy_initialization_requires_config_file(mock_config_file):
         with pytest.raises(ValueError) as excinfo:
             strategy = MACDTrendAdaptiveStrategy({'runmode': 'backtest'})
 
+        # Update assertions to match the new error message format
         assert "Configuration file not found" in str(excinfo.value)
-        assert "YAML configuration file is required" in str(excinfo.value)
+        assert "Please create a YAML configuration file" in str(excinfo.value)
 
 
 def test_strategy_initialization_with_config_file(mock_config_file):

@@ -225,7 +225,8 @@ bash setup-strategy.sh
 The script will:
 1. Copy the strategy to your FreqTrade strategies directory
 2. Set up Git hooks to automatically update the strategy when you pull changes
-3. Configure everything needed to use the strategy immediately
+3. Copy the sample YAML configuration file to the correct location
+4. Configure everything needed to use the strategy immediately
 
 #### Option 2: Manual Installation
 
@@ -249,19 +250,20 @@ pip install -r requirements.txt
 
 3. **IMPORTANT**: Create a configuration file
 
-This strategy requires a configuration file to work properly. A sample configuration file is provided in the repository. You need to:
+This strategy requires a YAML configuration file to work properly. A sample configuration file is provided in the repository. You need to:
 
 ```bash
 # Copy the sample config to the correct location
-cp config/sample_strategy_config.json config/strategy_config.json
+mkdir -p config
+cp samples/strategy_config.sample.yaml config/strategy_config.yaml
 
 # Then edit the file to customize it for your needs
-nano config/strategy_config.json
+nano config/strategy_config.yaml
 ```
 
-## Configuration
+# Configuration
 
-The strategy requires configuration via the `strategy_config.json` file. Different parameter sets should be provided for various timeframes (1m, 5m, 15m, 30m, 1h).
+The strategy requires configuration via the `strategy_config.yaml` file. Different parameter sets should be provided for various timeframes (1m, 5m, 15m, 30m, 1h).
 
 ### Basic Configuration
 
@@ -281,41 +283,39 @@ You can choose which timeframe parameters to use by modifying the `STRATEGY_MODE
 STRATEGY_MODE = StrategyMode.TIMEFRAME_5M  # Options: TIMEFRAME_1M, TIMEFRAME_5M, TIMEFRAME_15M, TIMEFRAME_30M, TIMEFRAME_1H
 ```
 
-The strategy will use the corresponding section from your `strategy_config.json` file.
+The strategy will use the corresponding section from your `strategy_config.yaml` file.
 
 ### Configuration File Structure
 
-The `strategy_config.json` file should have the following structure:
+The `strategy_config.yaml` file should have the following structure:
 
-```json
-{
-    "1m": {
-        "risk_reward_ratio": "1:1.5",
-        "min_roi": 0.015,
-        "max_roi": 0.035,
-        ...
-    },
-    "5m": {
-        "risk_reward_ratio": "1:2",
-        "min_roi": 0.02,
-        "max_roi": 0.045,
-        ...
-    },
-    "15m": {
-        ...
-    },
-    "30m": {
-        ...
-    },
-    "1h": {
-        ...
-    },
-    "global": {
-        "counter_trend_factor": 0.5,
-        "aligned_trend_factor": 1.0,
-        ...
-    }
-}
+```yaml
+# 1-minute timeframe configuration
+1m:
+  risk_reward_ratio: "1:1.5"
+  min_stoploss: -0.01
+  max_stoploss: -0.023
+  fast_length: 6
+  slow_length: 14
+  signal_length: 4
+  # Additional parameters...
+
+# 5-minute timeframe configuration
+5m:
+  risk_reward_ratio: "1:4"
+  min_stoploss: -0.0088
+  max_stoploss: -0.0175
+  fast_length: 5
+  slow_length: 26
+  # Additional parameters...
+
+# Global settings (applied to all timeframes unless overridden)
+global:
+  counter_trend_factor: 0.5
+  aligned_trend_factor: 1.0
+  counter_trend_stoploss_factor: 0.5
+  aligned_trend_stoploss_factor: 1.0
+  # Additional global parameters...
 ```
 
 Each timeframe section should contain parameters specific to that timeframe, while the "global" section contains parameters that apply to all timeframes.
@@ -335,84 +335,6 @@ The strategy configuration includes the following parameter categories:
 | `static_stoploss` | Fallback stoploss value when dynamic calculation fails | -0.055 |
 | `min_stoploss` | Minimum (closest to zero) stoploss value | -0.02 |
 | `max_stoploss` | Maximum (furthest from zero) stoploss value | -0.045 |
-
-#### MACD Parameters
-
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `fast_length` | Fast EMA period for MACD calculation | 12 |
-| `slow_length` | Slow EMA period for MACD calculation | 26 |
-| `signal_length` | Signal line period for MACD calculation | 9 |
-
-#### Trend Detection Parameters
-
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `adx_period` | Period for ADX indicator calculation | 14 |
-| `adx_threshold` | Minimum ADX value to consider a strong trend | 22 |
-| `ema_fast` | Fast EMA period for trend detection | 8 |
-| `ema_slow` | Slow EMA period for trend detection | 21 |
-
-#### Risk Management Parameters
-
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `counter_trend_factor` | Factor applied to ROI for counter-trend trades (lower = take profits sooner) | 0.6 |
-| `aligned_trend_factor` | Factor applied to ROI for trend-aligned trades | 1.2 |
-| `counter_trend_stoploss_factor` | Factor applied to stoploss for counter-trend trades (lower = tighter stoploss) | 0.6 |
-| `aligned_trend_stoploss_factor` | Factor applied to stoploss for trend-aligned trades | 1.2 |
-| `use_dynamic_stoploss` | Enable/disable dynamic stoploss calculation | true |
-
-#### Market Regime Parameters
-
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `min_win_rate` | Minimum win rate for ROI normalization | 0.2 |
-| `max_win_rate` | Maximum win rate for ROI normalization | 0.8 |
-| `regime_win_rate_diff` | Minimum win rate difference to determine market regime | 0.25 |
-| `min_recent_trades_per_direction` | Minimum number of trades required to detect market regime | 5 |
-| `max_recent_trades` | Maximum number of recent trades to track for performance metrics | 10 |
-
-#### Other Parameters
-
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `startup_candle_count` | Number of warmup candles required | 30 |
-| `roi_cache_update_interval` | Seconds between ROI cache updates | 60 |
-
-### Parameter Explanation and Optimization
-
-#### Understanding Risk-Reward Ratio
-
-The `risk_reward_ratio` parameter (e.g., "1:2.5") determines the relationship between your ROI target and stoploss. A ratio of 1:2.5 means that for every 1% you risk, you aim to gain 2.5%. This parameter directly affects stoploss calculation.
-
-Example: With ROI = 4% and a risk-reward ratio of 1:2 (0.5), the stoploss would be -2%.
-
-#### MACD Parameter Selection
-
-- **Fast/Slow Lengths**: These determine the sensitivity of the MACD indicator. Shorter periods are more sensitive (more signals but more noise), while longer periods are smoother (fewer signals but clearer trends).
-- **Signal Length**: Determines how responsive the signal line is to MACD line movements.
-
-#### Counter-Trend vs. Aligned-Trend Factors
-
-- **counter_trend_factor**: Reduces ROI target for trades that go against the detected market regime (e.g., short trades in a bullish market). Lower values (0.3-0.6) take profits sooner.
-- **aligned_trend_factor**: Multiplier for ROI target when trading with the market regime. Values above 1.0 allow for larger profit targets.
-- **counter_trend_stoploss_factor**: Adjusts stoploss to be tighter for counter-trend trades. Lower values create tighter stoplosses.
-- **aligned_trend_stoploss_factor**: Adjusts stoploss for trend-aligned trades. Higher values allow for looser stoplosses.
-
-#### Win Rate Adaptation
-
-- **min_win_rate/max_win_rate**: Define the range for normalizing win rates.
-- **regime_win_rate_diff**: How much better long trades must perform vs. short trades (or vice versa) to determine market regime. Higher values make regime changes less frequent.
-
-#### Optimization Tips
-
-1. **Timeframe**: Start with the 5m or 15m configuration, as these tend to be more stable.
-2. **Risk-Reward**: Adjust based on the volatility of your trading pairs:
-   - Lower risk-reward ratios (e.g., 1:1.5) for high volatility
-   - Higher risk-reward ratios (e.g., 1:3) for lower volatility
-3. **Trend Detection**: For faster-moving markets, reduce `adx_period` and `adx_threshold`
-4. **Counter-Trend Factors**: Risk-averse strategies should use lower values (0.3-0.5) to exit counter-trend trades quickly
 
 ## Strategy Logic
 

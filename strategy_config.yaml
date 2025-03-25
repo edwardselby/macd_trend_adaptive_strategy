@@ -1,0 +1,146 @@
+# MACD Trend Adaptive Strategy Configuration
+
+# 1-minute timeframe configuration
+1m:
+  risk_reward_ratio: "1:2.5"
+  min_roi: 0.02
+  max_roi: 0.035
+  min_stoploss: -0.015
+  max_stoploss: -0.025
+  fast_length: 12
+  slow_length: 36
+  signal_length: 12
+  adx_period: 36
+  adx_threshold: 60
+  ema_fast: 12
+  ema_slow: 55
+  startup_candle_count: 75
+  roi_cache_update_interval: 75
+  counter_trend_factor: 0.3
+  aligned_trend_factor: 0.6
+  counter_trend_stoploss_factor: 0.2
+  aligned_trend_stoploss_factor: 0.25
+  use_dynamic_stoploss: true
+  min_win_rate: 0.45
+  max_win_rate: 0.65
+  regime_win_rate_diff: 0.7
+  min_recent_trades_per_direction: 30
+  static_stoploss: -0.03
+
+# 5-minute timeframe configuration
+5m:
+  risk_reward_ratio: "1:4"
+  min_roi: 0.035
+  max_roi: 0.07
+  min_stoploss: -0.0088
+  max_stoploss: -0.0175
+  fast_length: 5
+  slow_length: 26
+  signal_length: 8
+  adx_period: 24
+  adx_threshold: 42
+  ema_fast: 5
+  ema_slow: 28
+  counter_trend_factor: 0.9
+  aligned_trend_factor: 1.7
+  counter_trend_stoploss_factor: 0.9
+  aligned_trend_stoploss_factor: 1.7
+  use_dynamic_stoploss: true
+  min_win_rate: 0.2
+  max_win_rate: 0.7
+  regime_win_rate_diff: 0.35
+  min_recent_trades_per_direction: 6
+  max_recent_trades: 9
+  default_roi: 0.08
+  static_stoploss: -0.07
+
+# 15-minute timeframe configuration
+15m:
+  risk_reward_ratio: "1:2.5"
+  min_roi: 0.028
+  max_roi: 0.06
+  min_stoploss: -0.02
+  max_stoploss: -0.045
+  fast_length: 12
+  slow_length: 26
+  signal_length: 9
+  adx_period: 14
+  adx_threshold: 22
+  ema_fast: 8
+  ema_slow: 21
+  counter_trend_factor: 0.6
+  aligned_trend_factor: 1.2
+  counter_trend_stoploss_factor: 0.6
+  aligned_trend_stoploss_factor: 1.2
+  use_dynamic_stoploss: true
+  min_win_rate: 0.2
+  max_win_rate: 0.8
+  regime_win_rate_diff: 0.25
+  min_recent_trades_per_direction: 5
+  max_recent_trades: 10
+  default_roi: 0.07
+  static_stoploss: -0.055
+
+# 30-minute timeframe configuration
+30m:
+  risk_reward_ratio: "1:2.75"
+  min_roi: 0.016
+  max_roi: 0.038
+  min_stoploss: -0.0058 
+  max_stoploss: -0.0138
+  fast_length: 18
+  slow_length: 40
+  signal_length: 12
+  adx_period: 28
+  adx_threshold: 44
+  ema_fast: 16
+  ema_slow: 48
+  counter_trend_factor: 0.7
+  aligned_trend_factor: 1.3
+  counter_trend_stoploss_factor: 0.7
+  aligned_trend_stoploss_factor: 1.3
+  use_dynamic_stoploss: true
+  min_win_rate: 0.2
+  max_win_rate: 0.8
+  regime_win_rate_diff: 0.12
+  min_recent_trades_per_direction: 2
+  max_recent_trades: 12
+  default_roi: 0.4
+  startup_candle_count: 40
+  roi_cache_update_interval: 150
+
+# 1-hour timeframe configuration
+1h:
+  risk_reward_ratio: "1:3"
+  min_roi: 0.035
+  max_roi: 0.075
+  min_stoploss: -0.0117
+  max_stoploss: -0.025
+  fast_length: 16
+  slow_length: 32
+  signal_length: 12
+  adx_period: 20
+  adx_threshold: 25
+  ema_fast: 12
+  ema_slow: 34
+  counter_trend_factor: 0.7
+  aligned_trend_factor: 1.4
+  counter_trend_stoploss_factor: 0.7
+  aligned_trend_stoploss_factor: 1.4
+  min_win_rate: 0.2
+  max_win_rate: 0.8
+  regime_win_rate_diff: 0.15
+  min_recent_trades_per_direction: 3
+  max_recent_trades: 15
+
+# Global settings (applied to all timeframes unless overridden)
+global:
+  counter_trend_factor: 0.5
+  aligned_trend_factor: 1.0
+  counter_trend_stoploss_factor: 0.5
+  aligned_trend_stoploss_factor: 1.0
+  use_dynamic_stoploss: true
+  min_win_rate: 0.2
+  max_win_rate: 0.8
+  min_recent_trades_per_direction: 5
+  max_recent_trades: 10
