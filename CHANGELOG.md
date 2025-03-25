@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-03-25
+
+### Added
+- Informative error message when PyYAML dependency is missing, with clear installation instructions
+- Support for YAML configuration files, replacing the previous JSON format
+
+### Changed
+- Refactored configuration system to use YAML format for improved readability and maintainability
+- Improved configuration file structure with better organization of parameters
+- Updated documentation to reflect new YAML configuration approach
+
+### Technical
+- Added PyYAML dependency for configuration handling
+- Internal refactoring of configuration loading mechanism
+- Restructured config validation to handle YAML format
+
 ## [0.5.0] - 2025-03-23
 
 ### Changed

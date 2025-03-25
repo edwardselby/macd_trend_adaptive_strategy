@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "macd-trend-adaptive-strategy"
-version = "0.5.0"
+version = "0.6.0"
 description = "Enhanced MACD Strategy with adaptive ROI and dynamic stoploss for FreqTrade"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Edward Selby <example@example.com>"]
 readme = "README.md"
 packages = [{include = "*"}]
 
