@@ -2,7 +2,14 @@ import logging
 import os
 from typing import Dict, Any
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    raise ImportError(
+        "PyYAML is required for this strategy. Please install it using 'pip install pyyaml'\n"
+        "Or if using Docker, run: docker exec -it your-freqtrade-container pip install pyyaml\n"
+        "Or simply add pyyaml to freqtrade's requirements.txt and rebuild the container"
+    )
 
 logger = logging.getLogger(__name__)
 
