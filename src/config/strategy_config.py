@@ -106,7 +106,7 @@ class StrategyConfig:
         # Configuration file is required
         if not config_path or not os.path.exists(config_path):
             raise ValueError(
-                f"Configuration file not found: {config_path}. A configuration file is required to use this strategy.")
+                f"Configuration file not found: {config_path}. A YAML configuration file is required to use this strategy.")
 
         # Initialize placeholder attributes
         self._initialize_placeholder_attributes()
@@ -157,17 +157,22 @@ class StrategyConfig:
 
     def _load_user_config(self, config_path: str) -> bool:
         """
-        Load user configuration from JSON file with support for timeframe-specific settings
+        Load user configuration from YAML file with support for timeframe-specific settings
 
         Args:
-            config_path: Path to JSON configuration file
+            config_path: Path to YAML configuration file
 
         Returns:
             bool: True if configuration was loaded successfully
         """
         try:
-            with open(config_path, 'r') as f:
-                config = json.load(f)
+            from .yaml_loader import load_config
+
+            # Load the YAML configuration
+            config = load_config(config_path)
+
+            # Get all valid timeframe values from StrategyMode enum
+            valid_timeframes = [mode.value for mode in StrategyMode if mode.value != "auto"]
 
             # First check if there's a timeframe-specific section
             if self.timeframe in config:
@@ -188,10 +193,10 @@ class StrategyConfig:
                     self._set_config_value(key, value)
 
             # If no timeframe-specific or global section, check for top-level parameters
-            elif any(key for key in config if key not in ['1m', '5m', '15m', '30m', '1h', 'global']):
+            elif any(key for key in config if key not in valid_timeframes + ["global"]):
                 # For backward compatibility, check for top-level parameters
                 for key, value in config.items():
-                    if key not in ['1m', '5m', '15m', '30m', '1h', 'global']:
+                    if key not in valid_timeframes + ["global"]:
                         self._set_config_value(key, value)
 
             logger.info(f"Loaded user configuration for {self.timeframe}")

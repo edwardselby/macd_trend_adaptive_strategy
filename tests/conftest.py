@@ -7,6 +7,7 @@ from unittest.mock import patch, MagicMock
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 
 from src.config.strategy_config import StrategyConfig, StrategyMode
 from src.performance.db_handler import DBHandler
@@ -18,7 +19,7 @@ from src.risk_management.stoploss_calculator import StoplossCalculator
 
 @pytest.fixture
 def mock_config_file():
-    """Create a temporary config file for testing"""
+    """Create a temporary YAML config file with comprehensive test settings"""
     config_data = {
         "1m": {
             "risk_reward_ratio": "1:1.5",
@@ -71,8 +72,8 @@ def mock_config_file():
         }
     }
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
-        json.dump(config_data, temp_file)
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as temp_file:
+        yaml.dump(config_data, temp_file)
         temp_file_path = temp_file.name
 
     yield temp_file_path
@@ -81,9 +82,28 @@ def mock_config_file():
     os.unlink(temp_file_path)
 
 
+def create_config_with_single_timeframe(timeframe="15m"):
+    """Create a config dictionary with only one timeframe section"""
+    config_data = {
+        timeframe: {
+            "risk_reward_ratio": "1:2",
+            "min_stoploss": -0.0125,
+            "max_stoploss": -0.0275,
+            "fast_length": 12,
+            "slow_length": 26,
+            "signal_length": 9,
+            "adx_period": 14,
+            "adx_threshold": 25,
+            "ema_fast": 8,
+            "ema_slow": 21
+        }
+    }
+    return config_data
+
+
 @pytest.fixture
 def strategy_config(mock_config_file):
-    """Create a StrategyConfig instance for testing"""
+    """Create a StrategyConfig instance from the sample YAML config"""
     return StrategyConfig(mode=StrategyMode.DEFAULT, config_path=mock_config_file)
 
 

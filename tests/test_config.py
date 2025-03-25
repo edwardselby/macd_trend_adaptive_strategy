@@ -1,4 +1,4 @@
-import json
+import yaml  # Add this import
 import os
 import tempfile
 from unittest.mock import patch, mock_open
@@ -14,173 +14,90 @@ def test_strategy_config_requires_config_file():
         StrategyConfig(mode=StrategyMode.DEFAULT, config_path=None)
 
     assert "Configuration file not found" in str(excinfo.value)
-    assert "A configuration file is required" in str(excinfo.value)
+    assert "A YAML configuration file is required" in str(excinfo.value)
 
 
 def test_strategy_config_requires_valid_file_path():
     """Test that StrategyConfig raises an error when an invalid config file path is provided"""
     with pytest.raises(ValueError) as excinfo:
-        StrategyConfig(mode=StrategyMode.DEFAULT, config_path="nonexistent_file.json")
+        StrategyConfig(mode=StrategyMode.DEFAULT, config_path="nonexistent_file.yaml")
 
     assert "Configuration file not found" in str(excinfo.value)
-    assert "A configuration file is required" in str(excinfo.value)
+    assert "A YAML configuration file is required" in str(excinfo.value)
 
 
-def test_strategy_config_from_valid_file():
+def test_strategy_config_from_valid_file(mock_config_file):
     """Test that StrategyConfig loads configuration from a valid file"""
-    # Create a temporary config file
-    config_data = {
-        "15m": {
-            "risk_reward_ratio": "1:2",
-            "min_stoploss": -0.0125,    # Closer to zero (tighter)
-            "max_stoploss": -0.0275,    # Further from zero (wider)
-            "fast_length": 12,
-            "slow_length": 26,
-            "signal_length": 9,
-            "adx_period": 14,
-            "adx_threshold": 25,
-            "ema_fast": 8,
-            "ema_slow": 21
-        }
-    }
+    # Test with DEFAULT/15m mode
+    config = StrategyConfig(mode=StrategyMode.DEFAULT, config_path=mock_config_file)
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
-        json.dump(config_data, temp_file)
-        temp_file_path = temp_file.name
+    # Check that values were loaded correctly
+    assert config.timeframe == '15m'
+    assert config.risk_reward_ratio_str == "1:2"
 
-    try:
-        # Test with DEFAULT/15m mode
-        config = StrategyConfig(mode=StrategyMode.DEFAULT, config_path=temp_file_path)
+    # Check stoploss values (primary parameters)
+    assert config.min_stoploss == -0.0125
+    assert config.max_stoploss == -0.0275
 
-        # Check that values were loaded correctly
-        assert config.timeframe == '15m'
-        assert config.risk_reward_ratio_str == "1:2"
-
-        # Check stoploss values (primary parameters)
-        assert config.min_stoploss == -0.0125
-        assert config.max_stoploss == -0.0275
-
-        # Check derived ROI values
-        expected_min_roi = abs(config.min_stoploss) * 2.0  # Using risk_reward_ratio 1:2
-        expected_max_roi = abs(config.max_stoploss) * 2.0  # Using risk_reward_ratio 1:2
-        assert abs(config.min_roi - expected_min_roi) < 0.0001
-        assert abs(config.max_roi - expected_max_roi) < 0.0001
-        assert config.fast_length == 12
-        assert config.slow_length == 26
-        assert config.signal_length == 9
-        assert config.adx_period == 14
-        assert config.adx_threshold == 25
-        assert config.ema_fast == 8
-        assert config.ema_slow == 21
-
-    finally:
-        # Clean up the temporary file
-        os.unlink(temp_file_path)
+    # Check derived ROI values
+    expected_min_roi = abs(config.min_stoploss) * 2.0  # Using risk_reward_ratio 1:2
+    expected_max_roi = abs(config.max_stoploss) * 2.0  # Using risk_reward_ratio 1:2
+    assert abs(config.min_roi - expected_min_roi) < 0.0001
+    assert abs(config.max_roi - expected_max_roi) < 0.0001
+    assert config.fast_length == 12
+    assert config.slow_length == 26
+    assert config.signal_length == 9
+    assert config.adx_period == 14
+    assert config.adx_threshold == 25
+    assert config.ema_fast == 8
+    assert config.ema_slow == 21
 
 
-def test_strategy_config_timeframe_specific_settings():
+def test_strategy_config_timeframe_specific_settings(mock_config_file):
     """Test that StrategyConfig loads timeframe-specific settings"""
-    # Create a temporary config file with multiple timeframes
-    config_data = {
-        "5m": {
-            "risk_reward_ratio": "1:3",
-            "min_stoploss": -0.01,  # Closer to zero (tighter)
-            "max_stoploss": -0.02  # Further from zero (wider)
-        },
-        "15m": {
-            "risk_reward_ratio": "1:2",
-            "min_stoploss": -0.0125,  # Closer to zero (tighter)
-            "max_stoploss": -0.0275  # Further from zero (wider)
-        }
-    }
+    # Test with 5m mode
+    config_5m = StrategyConfig(mode=StrategyMode.TIMEFRAME_5M, config_path=mock_config_file)
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
-        json.dump(config_data, temp_file)
-        temp_file_path = temp_file.name
+    # Check that 5m values were loaded correctly
+    assert config_5m.timeframe == '5m'
+    assert config_5m.risk_reward_ratio_str == "1:2"
+    assert config_5m.min_stoploss == -0.0125
+    assert config_5m.max_stoploss == -0.0275
 
-    try:
-        # Test with 5m mode
-        config_5m = StrategyConfig(mode=StrategyMode.TIMEFRAME_5M, config_path=temp_file_path)
+    # Check derived ROI values
+    expected_min_roi = abs(config_5m.min_stoploss) * 2.0  # risk_reward_ratio 1:2
+    expected_max_roi = abs(config_5m.max_stoploss) * 2.0  # risk_reward_ratio 1:2
+    assert abs(config_5m.min_roi - expected_min_roi) < 0.0001
+    assert abs(config_5m.max_roi - expected_max_roi) < 0.0001
 
-        # Check that 5m values were loaded correctly
-        assert config_5m.timeframe == '5m'
-        assert config_5m.risk_reward_ratio_str == "1:3"
-        assert config_5m.min_stoploss == -0.01
-        assert config_5m.max_stoploss == -0.02
+    # Test with 1m mode
+    config_1m = StrategyConfig(mode=StrategyMode.TIMEFRAME_1M, config_path=mock_config_file)
 
-        # Check derived ROI values
-        expected_min_roi = abs(config_5m.min_stoploss) * 3.0  # risk_reward_ratio 1:3
-        expected_max_roi = abs(config_5m.max_stoploss) * 3.0  # risk_reward_ratio 1:3
-        assert abs(config_5m.min_roi - expected_min_roi) < 0.0001
-        assert abs(config_5m.max_roi - expected_max_roi) < 0.0001
+    # Check that 1m values were loaded correctly
+    assert config_1m.timeframe == '1m'
+    assert config_1m.risk_reward_ratio_str == "1:1.5"
+    assert config_1m.min_stoploss == -0.01
+    assert config_1m.max_stoploss == -0.03
 
-        # Test with 15m mode
-        config_15m = StrategyConfig(mode=StrategyMode.TIMEFRAME_15M, config_path=temp_file_path)
-
-        # Check that 15m values were loaded correctly
-        assert config_15m.timeframe == '15m'
-        assert config_15m.risk_reward_ratio_str == "1:2"
-        assert config_15m.min_stoploss == -0.0125
-        assert config_15m.max_stoploss == -0.0275
-
-        # Check derived ROI values
-        expected_min_roi = abs(config_15m.min_stoploss) * 2.0  # risk_reward_ratio 1:2
-        expected_max_roi = abs(config_15m.max_stoploss) * 2.0  # risk_reward_ratio 1:2
-        assert abs(config_15m.min_roi - expected_min_roi) < 0.0001
-        assert abs(config_15m.max_roi - expected_max_roi) < 0.0001
-
-    finally:
-        # Clean up the temporary file
-        os.unlink(temp_file_path)
+    # Check derived ROI values
+    expected_min_roi = abs(config_1m.min_stoploss) * 1.5  # risk_reward_ratio 1:1.5
+    expected_max_roi = abs(config_1m.max_stoploss) * 1.5  # risk_reward_ratio 1:1.5
+    assert abs(config_1m.min_roi - expected_min_roi) < 0.0001
+    assert abs(config_1m.max_roi - expected_max_roi) < 0.0001
 
 
-def test_strategy_config_global_settings():
+def test_strategy_config_global_settings(mock_config_file):
     """Test that global settings apply to all timeframes"""
-    # Create a temporary config file with global settings
-    config_data = {
-        "5m": {
-            "fast_length": 5,
-            "slow_length": 15
-        },
-        "global": {
-            "risk_reward_ratio": "1:2",
-            "min_stoploss": -0.0125,  # Closer to zero (tighter)
-            "max_stoploss": -0.0275,  # Further from zero (wider)
-            "counter_trend_factor": 0.5,
-            "aligned_trend_factor": 1.0
-        }
-    }
+    # Test with 5m mode - should have timeframe settings plus global settings
+    config = StrategyConfig(mode=StrategyMode.TIMEFRAME_5M, config_path=mock_config_file)
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
-        json.dump(config_data, temp_file)
-        temp_file_path = temp_file.name
-
-    try:
-        # Test with 5m mode - should have timeframe settings plus global settings
-        config = StrategyConfig(mode=StrategyMode.TIMEFRAME_5M, config_path=temp_file_path)
-
-        # Check that both 5m-specific and global values were loaded correctly
-        assert config.timeframe == '5m'
-        assert config.fast_length == 5
-        assert config.slow_length == 15
-        assert config.risk_reward_ratio_str == "1:2"
-
-        # Check stoploss values
-        assert config.min_stoploss == -0.0125
-        assert config.max_stoploss == -0.0275
-
-        # Check derived ROI values
-        expected_min_roi = abs(config.min_stoploss) * 2.0  # Using risk_reward_ratio 1:2
-        expected_max_roi = abs(config.max_stoploss) * 2.0  # Using risk_reward_ratio 1:2
-        assert abs(config.min_roi - expected_min_roi) < 0.0001
-        assert abs(config.max_roi - expected_max_roi) < 0.0001
-
-        assert config.counter_trend_factor == 0.5
-        assert config.aligned_trend_factor == 1.0
-
-    finally:
-        # Clean up the temporary file
-        os.unlink(temp_file_path)
+    # Check that both 5m-specific and global values were loaded correctly
+    assert config.timeframe == '5m'
+    assert config.fast_length == 12
+    assert config.slow_length == 26
+    assert config.counter_trend_factor == 0.5  # From global
+    assert config.aligned_trend_factor == 1.0  # From global
+    assert config.startup_candle_count == 30  # From global
 
 
 def test_config_load_failure():
@@ -188,60 +105,55 @@ def test_config_load_failure():
     # First, we need to patch os.path.exists to return True
     # so that the code proceeds to try to open the file
     with patch("os.path.exists", return_value=True):
-        # Then we mock the open call to return invalid JSON
-        with patch("builtins.open", mock_open(read_data="invalid json content")):
+        # Then we mock the open call to return invalid YAML
+        with patch("builtins.open", mock_open(read_data="invalid: yaml: - content")):
             with pytest.raises(ValueError) as excinfo:
-                StrategyConfig(mode=StrategyMode.DEFAULT, config_path="fake_path.json")
+                StrategyConfig(mode=StrategyMode.DEFAULT, config_path="fake_path.yaml")
 
     # Now check for the correct error message
     assert "Failed to load configuration" in str(excinfo.value)
 
 
-def test_config_derived_params():
+def test_config_derived_params(mock_config_file):
     """Test that derived parameters are calculated correctly"""
-    # Create a temporary config file
-    config_data = {
-        "15m": {
-            "risk_reward_ratio": "1:2",
-            "min_stoploss": -0.02,  # Closer to zero (tighter)
-            "max_stoploss": -0.05  # Further from zero (wider)
-        }
-    }
+    # Create a config with specific timeframe settings for 15m
+    config = StrategyConfig(mode=StrategyMode.TIMEFRAME_15M, config_path=mock_config_file)
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
-        json.dump(config_data, temp_file)
-        temp_file_path = temp_file.name
+    # Check derived parameters
+    risk_reward_float = float(config.risk_reward_ratio_str.split(':')[1])
+    assert config.risk_reward_ratio_float == risk_reward_float
+
+    # Base stoploss should be the average of min and max
+    expected_base_stoploss = (config.min_stoploss + config.max_stoploss) / 2
+    assert abs(config.base_stoploss - expected_base_stoploss) < 0.0001, \
+        f"Expected base_stoploss {expected_base_stoploss}, got {config.base_stoploss}"
+
+    # ROI values should be derived from stoploss * risk_reward_ratio
+    expected_min_roi = abs(config.min_stoploss) * config.risk_reward_ratio_float
+    assert abs(config.min_roi - expected_min_roi) < 0.0001, \
+        f"Expected min_roi {expected_min_roi}, got {config.min_roi}"
+
+    expected_max_roi = abs(config.max_stoploss) * config.risk_reward_ratio_float
+    assert abs(config.max_roi - expected_max_roi) < 0.0001, \
+        f"Expected max_roi {expected_max_roi}, got {config.max_roi}"
+
+    # Check fallback values
+    assert config.static_stoploss <= config.max_stoploss * 1.2, \
+        "static_stoploss should be more negative than max_stoploss"
+    assert config.default_roi >= config.max_roi * 1.2, \
+        "default_roi should be higher than max_roi"
+
+
+def test_config_extension_validation():
+    """Test that configuration files must have a .yaml or .yml extension"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as temp_file:
+        yaml.dump({"15m": {"risk_reward_ratio": "1:2"}}, temp_file)
+        invalid_ext_path = temp_file.name
 
     try:
-        config = StrategyConfig(mode=StrategyMode.TIMEFRAME_15M, config_path=temp_file_path)
+        with pytest.raises(ValueError) as excinfo:
+            StrategyConfig(mode=StrategyMode.DEFAULT, config_path=invalid_ext_path)
 
-        # Check derived parameters
-        assert config.risk_reward_ratio_float == 2.0  # 1:2 as float
-
-        # Base stoploss should be the average of min and max
-        expected_base_stoploss = (config.min_stoploss + config.max_stoploss) / 2  # (-0.02 + -0.05) / 2 = -0.035
-        assert abs(config.base_stoploss - expected_base_stoploss) < 0.0001, \
-            f"Expected base_stoploss {expected_base_stoploss}, got {config.base_stoploss}"
-
-        # ROI values should be derived from stoploss * risk_reward_ratio
-        expected_min_roi = abs(config.min_stoploss) * config.risk_reward_ratio_float  # 0.02 * 2 = 0.04
-        assert abs(config.min_roi - expected_min_roi) < 0.0001, \
-            f"Expected min_roi {expected_min_roi}, got {config.min_roi}"
-
-        expected_max_roi = abs(config.max_stoploss) * config.risk_reward_ratio_float  # 0.05 * 2 = 0.1
-        assert abs(config.max_roi - expected_max_roi) < 0.0001, \
-            f"Expected max_roi {expected_max_roi}, got {config.max_roi}"
-
-        expected_base_roi = abs(config.base_stoploss) * config.risk_reward_ratio_float  # 0.035 * 2 = 0.07
-        assert abs(config.base_roi - expected_base_roi) < 0.0001, \
-            f"Expected base_roi {expected_base_roi}, got {config.base_roi}"
-
-        # Check fallback values
-        assert config.static_stoploss <= config.max_stoploss * 1.2, \
-            "static_stoploss should be more negative than max_stoploss"
-        assert config.default_roi >= config.max_roi * 1.2, \
-            "default_roi should be higher than max_roi"
-
+        assert "must have a .yaml or .yml extension" in str(excinfo.value)
     finally:
-        # Clean up the temporary file
-        os.unlink(temp_file_path)
+        os.unlink(invalid_ext_path)

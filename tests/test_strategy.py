@@ -1,6 +1,3 @@
-import json
-import os
-import tempfile
 from datetime import datetime
 from unittest.mock import patch, MagicMock, ANY
 
@@ -14,51 +11,18 @@ from src.regime.detector import RegimeDetector
 from tests.conftest import set_market_state, cleanup_patchers
 
 
-# Move the fixture to module level
-@pytest.fixture
-def config_file():
-    """Create a temporary config file with new parameter structure"""
-    config_data = {
-        "5m": {
-            "risk_reward_ratio": "1:2",
-            "min_stoploss": -0.01,  # Closer to zero (tighter)
-            "max_stoploss": -0.05,  # Further from zero (wider)
-            "counter_trend_factor": 0.5,
-            "aligned_trend_factor": 1.5,
-            "counter_trend_stoploss_factor": 0.5,
-            "aligned_trend_stoploss_factor": 1.5,
-            "fast_length": 12,
-            "slow_length": 26,
-            "signal_length": 9,
-            "adx_period": 14,
-            "adx_threshold": 25,
-            "ema_fast": 8,
-            "ema_slow": 21
-        }
-    }
-
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
-        json.dump(config_data, temp_file)
-        temp_file_path = temp_file.name
-
-    yield temp_file_path
-
-    # Clean up the temporary file
-    os.unlink(temp_file_path)
-
-
 # Helper function to create a strategy instance with appropriate mocks
-def create_strategy(config_file, mode=StrategyMode.TIMEFRAME_5M):
+def create_strategy(mock_config_file, mode=StrategyMode.TIMEFRAME_5M):
     """Helper to create a strategy instance with mocked config path"""
     with patch.object(MACDTrendAdaptiveStrategy, 'STRATEGY_MODE', mode):
-        with patch('os.path.join', return_value=config_file):
+        with patch('os.path.join', return_value=mock_config_file):
             strategy = MACDTrendAdaptiveStrategy({'runmode': 'backtest'})
             return strategy
 
 
 # Convert class-based tests to flat functions
 @patch.object(MACDTrendAdaptiveStrategy, 'STRATEGY_MODE', StrategyMode.TIMEFRAME_5M)
-def test_strategy_initialization_requires_config_file(config_file):
+def test_strategy_initialization_requires_config_file(mock_config_file):
     """Test that strategy initialization requires a config file"""
     # Mock the config file check to return False
     with patch('os.path.exists', return_value=False):
@@ -66,12 +30,12 @@ def test_strategy_initialization_requires_config_file(config_file):
             strategy = MACDTrendAdaptiveStrategy({'runmode': 'backtest'})
 
         assert "Configuration file not found" in str(excinfo.value)
-        assert "Please create a configuration file" in str(excinfo.value)
+        assert "YAML configuration file is required" in str(excinfo.value)
 
 
-def test_strategy_initialization_with_config_file(config_file):
+def test_strategy_initialization_with_config_file(mock_config_file):
     """Test that strategy initializes properly with a config file"""
-    strategy = create_strategy(config_file)
+    strategy = create_strategy(mock_config_file)
 
     # Check that the strategy initialized properly
     assert strategy.timeframe == '5m'
@@ -86,9 +50,9 @@ def test_strategy_initialization_with_config_file(config_file):
     assert strategy.stoploss_calculator is not None
 
 
-def test_confirm_trade_entry(config_file):
+def test_confirm_trade_entry(mock_config_file):
     """Test confirm_trade_entry creates a trade cache entry"""
-    strategy = create_strategy(config_file)
+    strategy = create_strategy(mock_config_file)
 
     # Save initial cache state
     initial_cache_len = len(strategy.trade_cache['active_trades'])
@@ -104,9 +68,9 @@ def test_confirm_trade_entry(config_file):
     assert len(strategy.trade_cache['active_trades']) > initial_cache_len
 
 
-def test_should_exit_with_roi(config_file):
+def test_should_exit_with_roi(mock_config_file):
     """Test should_exit returns ROI exit signal when profit target is reached"""
-    strategy = create_strategy(config_file)
+    strategy = create_strategy(mock_config_file)
 
     # Create mock trade
     trade = MagicMock(spec=Trade)
@@ -143,9 +107,9 @@ def test_should_exit_with_roi(config_file):
         assert "adaptive_roi" in exit_signals[0].exit_reason
 
 
-def test_should_exit_with_stoploss(config_file):
+def test_should_exit_with_stoploss(mock_config_file):
     """Test should_exit returns stoploss signal when price hits stoploss level"""
-    strategy = create_strategy(config_file)
+    strategy = create_strategy(mock_config_file)
 
     # Create mock trade
     trade = MagicMock(spec=Trade)
@@ -185,9 +149,9 @@ def test_should_exit_with_stoploss(config_file):
         assert "stoploss_" in exit_signals[0].exit_reason
 
 
-def test_confirm_trade_exit(config_file):
+def test_confirm_trade_exit(mock_config_file):
     """Test confirm_trade_exit updates performance tracking and removes trade from cache"""
-    strategy = create_strategy(config_file)
+    strategy = create_strategy(mock_config_file)
 
     # Set up mocks for components we don't want to test
     strategy.performance_tracker = MagicMock()
@@ -227,9 +191,9 @@ def test_confirm_trade_exit(config_file):
     assert trade_id not in strategy.trade_cache['active_trades'], "Trade should be removed from cache"
 
 
-def test_handle_missing_trade(config_file):
+def test_handle_missing_trade(mock_config_file):
     """Test _handle_missing_trade recreates trade cache entry"""
-    strategy = create_strategy(config_file)
+    strategy = create_strategy(mock_config_file)
 
     # Create a mock trade that isn't in the cache
     trade = MagicMock(spec=Trade)
@@ -264,9 +228,9 @@ def test_handle_missing_trade(config_file):
     assert result['stoploss'] < 0
 
 
-def test_bot_start(config_file):
+def test_bot_start(mock_config_file):
     """Test bot_start recovers existing trades"""
-    strategy = create_strategy(config_file, StrategyMode.TIMEFRAME_5M)
+    strategy = create_strategy(mock_config_file, StrategyMode.TIMEFRAME_5M)
 
     # Replace _handle_missing_trade with a mock that we control
     strategy._handle_missing_trade = MagicMock()
@@ -305,9 +269,9 @@ def test_bot_start(config_file):
         ("neutral", None, True),  # Short in neutral
     ]
 )
-def test_market_regime_affects_trade_parameters(config_file, regime, aligned_dir, is_short):
+def test_market_regime_affects_trade_parameters(mock_config_file, regime, aligned_dir, is_short):
     """Test how market regime affects trade parameters"""
-    strategy = create_strategy(config_file)
+    strategy = create_strategy(mock_config_file)
 
     # Set up test parameters
     current_time = datetime.now()
@@ -390,10 +354,10 @@ def test_market_regime_affects_trade_parameters(config_file, regime, aligned_dir
         (True, "neutral", None, 0.025, 0.024, False),  # Short in neutral, profit < ROI
     ]
 )
-def test_should_exit_with_different_regimes(config_file, is_short, regime, aligned_dir, trade_roi, profit_ratio,
+def test_should_exit_with_different_regimes(mock_config_file, is_short, regime, aligned_dir, trade_roi, profit_ratio,
                                             should_exit):
     """Test should_exit behavior with different market regimes and ROI values"""
-    strategy = create_strategy(config_file)
+    strategy = create_strategy(mock_config_file)
 
     # Create mock trade with fixed timestamp for reproducibility
     fixed_time = datetime(2025, 1, 1, 12, 0, 0)
@@ -501,9 +465,9 @@ def test_should_exit_with_different_regimes(config_file, is_short, regime, align
         ("neutral", None, "short", False, False),  # Short in neutral (neither aligned nor counter)
     ]
 )
-def test_regime_alignment_flags(config_file, regime, aligned_dir, direction, expected_aligned, expected_counter):
+def test_regime_alignment_flags(mock_config_file, regime, aligned_dir, direction, expected_aligned, expected_counter):
     """Test that trade alignment flags are set correctly based on market regime and verify ROI/stoploss calculations"""
-    strategy = create_strategy(config_file)
+    strategy = create_strategy(mock_config_file)
 
     # Set parameters for predictable values
     strategy.strategy_config.min_stoploss = -0.01  # Closer to zero (tighter)
@@ -513,6 +477,9 @@ def test_regime_alignment_flags(config_file, regime, aligned_dir, direction, exp
     strategy.strategy_config.aligned_trend_stoploss_factor = 1.5
     strategy.strategy_config.counter_trend_stoploss_factor = 0.5
     strategy.strategy_config.risk_reward_ratio = 2.0
+
+    # Set default_roi to a higher value to prevent it from interfering with our tests
+    strategy.strategy_config.default_roi = 0.25  # Higher than any test ROI we'll generate
 
     # Create mock trade and fixed timestamp
     fixed_time = datetime(2025, 1, 1, 12, 0, 0)
@@ -589,6 +556,7 @@ def test_regime_alignment_flags(config_file, regime, aligned_dir, direction, exp
         except AssertionError as e:
             # Print debug info if assertion fails
             print(f"DEBUG: roi={roi}, stoploss={stoploss}")
+            print(f"DEBUG: default_roi={strategy.strategy_config.default_roi}")
             print(f"DEBUG: exit signals test failed: {e}")
             print(f"DEBUG: trade in cache? {trade_id in strategy.trade_cache['active_trades']}")
             if trade_id in strategy.trade_cache['active_trades']:

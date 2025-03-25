@@ -77,7 +77,7 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         if not os.path.exists(config_path):
             raise ValueError(
                 f"Configuration file not found at {config_path}. "
-                f"Please create a configuration file before using this strategy."
+                f"Please create a YAML configuration file before using this strategy."
             )
 
         # Auto-detect timeframe from FreqTrade config

@@ -1,7 +1,3 @@
-"""
-YAML configuration loader for MACD Trend Adaptive Strategy.
-Handles loading and basic validation of YAML configuration files.
-"""
 import logging
 import os
 from typing import Dict, Any
@@ -29,22 +25,29 @@ def load_config(config_path: str) -> Dict[str, Any]:
         raise ValueError(f"Configuration file not found: {config_path}")
 
     # Check file extension
-    if not config_path.lower().endswith(('.yaml', '.yml')):
-        logger.warning(f"File {config_path} does not have a .yaml or .yml extension")
+    file_ext = os.path.splitext(config_path)[1].lower()
+    if file_ext not in ['.yaml', '.yml']:
+        raise ValueError(f"Configuration file must have a .yaml or .yml extension, got: {file_ext}")
 
     try:
         # Load YAML content
         with open(config_path, 'r') as f:
             config_data = yaml.safe_load(f)
+            logger.info(f"Loaded YAML configuration from {config_path}")
 
         # Basic validation
         if not isinstance(config_data, dict):
-            raise ValueError(f"Configuration file {config_path} must contain a YAML dictionary")
+            raise ValueError(f"Configuration file {config_path} must contain a dictionary")
 
-        # Check for at least one timeframe section
-        timeframes = [tf for tf in config_data.keys() if tf in ["1m", "5m", "15m", "30m", "1h"]]
-        if not timeframes:
-            raise ValueError(f"Configuration file {config_path} must contain at least one timeframe section (1m, 5m, 15m, 30m, 1h)")
+        # Get valid timeframes from StrategyMode
+        from .strategy_config import StrategyMode
+        valid_timeframes = [mode.value for mode in StrategyMode if mode.value != "auto"]
+
+        # Check for at least one timeframe section or global section
+        timeframes = [tf for tf in config_data.keys() if tf in valid_timeframes]
+        if not timeframes and "global" not in config_data:
+            raise ValueError(
+                f"Configuration file {config_path} must contain at least one timeframe section {valid_timeframes} or a global section")
 
         return config_data
 
