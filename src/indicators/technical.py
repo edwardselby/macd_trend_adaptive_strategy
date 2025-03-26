@@ -20,9 +20,12 @@ def calculate_indicators(dataframe: DataFrame, config) -> DataFrame:
     # Add Trend Detection Indicators
     dataframe['ema_fast'] = ta.EMA(dataframe, timeperiod=config.ema_fast)
     dataframe['ema_slow'] = ta.EMA(dataframe, timeperiod=config.ema_slow)
-    dataframe['adx'] = ta.ADX(dataframe, timeperiod=config.adx_period)
-    dataframe['plus_di'] = ta.PLUS_DI(dataframe, timeperiod=config.adx_period)
-    dataframe['minus_di'] = ta.MINUS_DI(dataframe, timeperiod=config.adx_period)
+
+    # Use adx_period from config (which defaults to 14 if not specified)
+    adx_period = getattr(config, 'adx_period', 14)  # Fallback to 14 if not found
+    dataframe['adx'] = ta.ADX(dataframe, timeperiod=adx_period)
+    dataframe['plus_di'] = ta.PLUS_DI(dataframe, timeperiod=adx_period)
+    dataframe['minus_di'] = ta.MINUS_DI(dataframe, timeperiod=adx_period)
 
     # Determine trend conditions
     dataframe['uptrend'] = (

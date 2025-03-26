@@ -336,6 +336,21 @@ The strategy configuration includes the following parameter categories:
 | `min_stoploss` | Minimum (closest to zero) stoploss value | -0.02 |
 | `max_stoploss` | Maximum (furthest from zero) stoploss value | -0.045 |
 
+### Simplified ADX Configuration
+
+To make the strategy more user-friendly, the ADX configuration has been simplified:
+- No need to set `adx_period` anymore (fixed at standard value of 14)
+- `adx_threshold` now accepts human-readable values:
+  - `weak`: Minimum trend requirement (value: 25)
+  - `normal`: Medium trend strength (value: 50)
+  - `strong`: Strong trend strength (value: 75)
+  - `extreme`: Maximum trend strength (value: 90)
+
+Example configuration:
+```yaml
+adx_threshold: "normal"  # Medium trend strength requirement
+```
+
 ## Strategy Logic
 
 ### Entry Signals

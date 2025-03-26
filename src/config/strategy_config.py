@@ -20,6 +20,35 @@ class StrategyMode(str, Enum):
     AUTO = "auto"
 
 
+# ADX strength constants
+class ADXStrength:
+    WEAK = 25  # Minimum trend requirement
+    NORMAL = 50  # Medium trend strength
+    STRONG = 75  # Strong trend strength
+    EXTREME = 90  # Maximum trend strength
+
+    # Mapping from string to value
+    MAPPING = {
+        "weak": WEAK,
+        "normal": NORMAL,
+        "strong": STRONG,
+        "extreme": EXTREME
+    }
+
+    @classmethod
+    def get_value(cls, strength_str) -> int:
+        """Convert string strength level to numeric value"""
+        if not isinstance(strength_str, str):
+            # Handle numeric values for backward compatibility
+            return int(strength_str)
+
+        strength_str = strength_str.lower()
+        if strength_str not in cls.MAPPING:
+            # Default to "normal" if invalid
+            return cls.NORMAL
+        return cls.MAPPING[strength_str]
+
+
 class StrategyConfig:
     """
     # Risk Management Documentation for MACD Trend Adaptive Strategy
@@ -149,6 +178,9 @@ class StrategyConfig:
         self.startup_candle_count = 30
         self.roi_cache_update_interval = 60
 
+        # Add this line to ensure adx_period is always available
+        self.adx_period = 14  # Standard ADX period
+
         # Core settings - these will be overridden by config
         self.risk_reward_ratio = "1:2"
         self.risk_reward_ratio_str = "1:2"
@@ -215,22 +247,28 @@ class StrategyConfig:
             value: Parameter value from config file
         """
         try:
+            # Special handling for ADX threshold
+            if key == 'adx_threshold':
+                # Store the original string value if it's a string
+                if isinstance(value, str):
+                    setattr(self, 'adx_threshold_str', value.lower())
+                    # Convert string to numeric value for the actual threshold
+                    value = ADXStrength.get_value(value)
             # Convert numeric values to float if needed
-            if key in ['min_roi', 'max_roi', 'adx_threshold']:
+            elif key in ['min_roi', 'max_roi']:
                 value = float(value)
             elif key in ['fast_length', 'slow_length', 'signal_length',
-                         'adx_period', 'ema_fast', 'ema_slow',
+                         'ema_fast', 'ema_slow',
                          'startup_candle_count', 'roi_cache_update_interval']:
                 value = int(value)
 
             # Set the attribute
             setattr(self, key, value)
             logger.debug(f"Set configuration parameter {key} = {value}")
-
         except Exception as e:
             logger.error(f"Error setting configuration parameter {key}: {e}")
 
-    def _parse_risk_reward_ratio(self) -> None:
+    def _parse_risk_reward_ratio(self):
         """Parse risk:reward ratio string (e.g. "1:2") to numeric value"""
         try:
             risk, reward = self.risk_reward_ratio.split(':')
@@ -280,13 +318,37 @@ class StrategyConfig:
 
     def get_config_summary(self) -> str:
         """Get a summary of the configuration for logging"""
+
+        # Helper function to get ADX description
+        def get_adx_description():
+            if not hasattr(self, 'adx_threshold'):
+                return "Unknown"
+
+            # Use stored string value if available
+            if hasattr(self, 'adx_threshold_str'):
+                adx_str = self.adx_threshold_str.capitalize()
+                adx_value = self.adx_threshold
+                return f"{adx_str} ({adx_value})"
+
+            # Otherwise determine description from numeric value
+            adx_value = self.adx_threshold
+            if adx_value <= ADXStrength.WEAK:
+                return f"Weak ({adx_value})"
+            elif adx_value <= ADXStrength.NORMAL:
+                return f"Normal ({adx_value})"
+            elif adx_value <= ADXStrength.STRONG:
+                return f"Strong ({adx_value})"
+            else:
+                return f"Extreme ({adx_value})"
+
+        # Build the configuration summary
         return (
             f"Strategy Configuration for {self.timeframe}:\n"
             f"- R:R ratio: {self.risk_reward_ratio_str} ({self.risk_reward_ratio:.3f})\n"
             f"- ROI: Min={self.min_roi:.2%}, Max={self.max_roi:.2%}, Base={self.base_roi:.2%}\n"
             f"- Stoploss: Min={self.min_stoploss:.2%}, Max={self.max_stoploss:.2%}\n"
             f"- MACD: Fast={self.fast_length}, Slow={self.slow_length}, Signal={self.signal_length}\n"
-            f"- Trend: ADX Period={self.adx_period}, Threshold={self.adx_threshold}, EMA Fast={self.ema_fast}, EMA Slow={self.ema_slow}\n"
+            f"- Trend: ADX Threshold={get_adx_description()}, EMA Fast={self.ema_fast}, EMA Slow={self.ema_slow}\n"
             f"- Factors: Counter={self.counter_trend_factor:.2f}, Aligned={self.aligned_trend_factor:.2f}, "
             f"Counter SL={self.counter_trend_stoploss_factor:.2f}, Aligned SL={self.aligned_trend_stoploss_factor:.2f}\n"
         )

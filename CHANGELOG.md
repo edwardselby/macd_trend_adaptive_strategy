@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Simplified ADX configuration:
+  - Removed `adx_period` parameter and set to standard value of 14
+  - Converted numeric `adx_threshold` to human-readable values (`weak`, `normal`, `strong`, `extreme`)
+  - Added backward compatibility for numeric threshold values
+- Updated configuration validator to handle string-based ADX thresholds
+- Improved configuration summary display to show ADX threshold in human-readable format
+
 ## [0.6.0] - 2025-03-25
 
 ### Added

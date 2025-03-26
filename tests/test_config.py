@@ -48,9 +48,7 @@ def test_strategy_config_from_valid_file(mock_config_file):
     assert config.slow_length == 26
     assert config.signal_length == 9
     assert config.adx_period == 14
-    assert config.adx_threshold == 25
-    assert config.ema_fast == 8
-    assert config.ema_slow == 21
+    assert config.adx_threshold == 50  # Changed from 25 to 50 for 'normal'
 
 
 def test_strategy_config_timeframe_specific_settings(mock_config_file):

@@ -28,8 +28,7 @@ def mock_config_file():
             "fast_length": 6,
             "slow_length": 14,
             "signal_length": 4,
-            "adx_period": 8,
-            "adx_threshold": 15,
+            "adx_threshold": "strong",  # Changed from numeric to string
             "ema_fast": 3,
             "ema_slow": 10
         },
@@ -40,8 +39,7 @@ def mock_config_file():
             "fast_length": 12,
             "slow_length": 26,
             "signal_length": 9,
-            "adx_period": 14,
-            "adx_threshold": 25,
+            "adx_threshold": "normal",  # Changed from numeric to string
             "ema_fast": 8,
             "ema_slow": 21
         },
@@ -52,8 +50,7 @@ def mock_config_file():
             "fast_length": 12,
             "slow_length": 26,
             "signal_length": 9,
-            "adx_period": 14,
-            "adx_threshold": 25,
+            "adx_threshold": "normal",  # Changed from numeric to string
             "ema_fast": 8,
             "ema_slow": 21
         },

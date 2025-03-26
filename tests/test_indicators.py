@@ -17,9 +17,10 @@ def test_calculate_indicators(sample_dataframe, strategy_config):
 
     # Calculate a more appropriate startup period
     # MACD typically needs slowperiod + signalperiod + 1 (for shift)
+    # ADX now uses static period of 14
     min_startup = max(
         strategy_config.slow_length + strategy_config.signal_length + 1,
-        strategy_config.adx_period + 1,  # ADX also needs a period
+        14 + 1,  # ADX now uses static period of 14
         strategy_config.startup_candle_count
     )
 

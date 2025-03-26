@@ -33,8 +33,8 @@ class ConfigValidator:
         'signal_length': (int, True, 2, 20, 9),
 
         # Trend detection parameters
-        'adx_period': (int, True, 5, 50, 14),
-        'adx_threshold': (float, True, 5.0, 50.0, 20.0),
+        'adx_period': (int, False, 7, 30, 14),  # Now optional with default value of 14
+        'adx_threshold': ((str, int, float), True, None, None, 'normal'),  # Now accepts string values
         'ema_fast': (int, True, 2, 50, 8),
         'ema_slow': (int, True, 5, 100, 21),
 
@@ -84,18 +84,34 @@ class ConfigValidator:
                 value = getattr(config_obj, param_name)
 
                 # Check type
-                if value is not None and not isinstance(value, param_type):
-                    errors.append(
-                        f"Parameter {param_name} has incorrect type: expected {param_type.__name__}, "
-                        f"got {type(value).__name__}")
-                    # Continue validation for other parameters, but skip constraints for this one
-                    continue
+                if value is not None:
+                    # Special handling for parameters that can have multiple types
+                    if isinstance(param_type, tuple):
+                        if not any(isinstance(value, t) for t in param_type):
+                            errors.append(
+                                f"Parameter {param_name} has incorrect type: expected one of {[t.__name__ for t in param_type]}, "
+                                f"got {type(value).__name__}")
+                            # Continue validation for other parameters, but skip constraints for this one
+                            continue
+                    elif not isinstance(value, param_type):
+                        errors.append(
+                            f"Parameter {param_name} has incorrect type: expected {param_type.__name__}, "
+                            f"got {type(value).__name__}")
+                        # Continue validation for other parameters, but skip constraints for this one
+                        continue
 
                 # Check value constraints for numeric types
                 if value is not None and param_type in (int, float) and not cls._check_numeric_constraints(
                         value, min_val, max_val, param_name, errors):
                     # Error already added in _check_numeric_constraints
                     pass
+
+                # Special validation for string-based adx_threshold
+                if param_name == 'adx_threshold' and isinstance(value, str):
+                    if value.lower() not in ['weak', 'normal', 'strong', 'extreme']:
+                        errors.append(
+                            f"Invalid adx_threshold value: '{value}'. "
+                            f"Must be one of: weak, normal, strong, extreme.")
 
         # Check for logical consistency across parameters
         cls._check_logical_consistency(config_obj, errors)
@@ -225,7 +241,26 @@ class ConfigValidator:
                     continue
 
                 # Fix type if possible
-                if not isinstance(value, param_type):
+                if isinstance(param_type, tuple):
+                    # Handle multiple allowed types
+                    if not any(isinstance(value, t) for t in param_type):
+                        # Try to convert to the first type in the tuple
+                        try:
+                            if param_name == 'adx_threshold' and isinstance(value, str):
+                                # Don't convert string values for adx_threshold
+                                pass
+                            else:
+                                new_value = param_type[0](value)
+                                setattr(config_obj, param_name, new_value)
+                                fixes.append(
+                                    f"Converted parameter {param_name} from {type(value).__name__} to {param_type[0].__name__}")
+                                value = new_value
+                        except (ValueError, TypeError):
+                            errors.append(
+                                f"Could not convert parameter {param_name} from {type(value).__name__} "
+                                f"to {param_type[0].__name__}")
+                            continue
+                elif not isinstance(value, param_type):
                     try:
                         if param_type == bool and isinstance(value, str):
                             # Handle boolean string conversion
@@ -298,7 +333,7 @@ class ConfigValidator:
         info = {}
         for param_name, (param_type, required, min_val, max_val, default) in cls.PARAMETER_DEFINITIONS.items():
             info[param_name] = {
-                'type': param_type.__name__,
+                'type': param_type.__name__ if not isinstance(param_type, tuple) else [t.__name__ for t in param_type],
                 'required': required,
                 'min_value': min_val,
                 'max_value': max_val,

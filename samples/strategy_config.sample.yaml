@@ -39,17 +39,16 @@ global:
   signal_length: 12                   # Signal line period for MACD
   
   # Trend detection parameters
-  adx_period: 36                      # Period for ADX indicator
-  adx_threshold: 60                   # Minimum ADX value to consider a strong trend
+  adx_threshold: "strong"             # Trend strength requirement (weak, normal, strong, extreme)
   ema_fast: 12                        # Fast EMA period for trend detection
   ema_slow: 55                        # Slow EMA period for trend detection
-  
+
   # Risk factors (override globals)
   counter_trend_factor: 0.3           # More conservative for 1m timeframe
   aligned_trend_factor: 0.6           # More conservative for 1m timeframe
   counter_trend_stoploss_factor: 0.2  # Tighter stoplosses for 1m timeframe
   aligned_trend_stoploss_factor: 0.25 # Tighter stoplosses for 1m timeframe
-  
+
   # Regime detection parameters
   min_win_rate: 0.45                  # Higher minimum win rate for 1m timeframe
   max_win_rate: 0.65                  # Lower maximum win rate for 1m timeframe
@@ -64,8 +63,7 @@ global:
   fast_length: 5
   slow_length: 26
   signal_length: 8
-  adx_period: 24
-  adx_threshold: 42
+  adx_threshold: "normal"             # Medium trend strength requirement
   ema_fast: 5
   ema_slow: 28
   counter_trend_factor: 0.9
@@ -86,8 +84,7 @@ global:
   fast_length: 12
   slow_length: 26
   signal_length: 9
-  adx_period: 14
-  adx_threshold: 22
+  adx_threshold: "weak"               # Minimum trend requirement
   ema_fast: 8
   ema_slow: 21
   counter_trend_factor: 0.6
@@ -108,8 +105,7 @@ global:
   fast_length: 18
   slow_length: 40
   signal_length: 12
-  adx_period: 28
-  adx_threshold: 44
+  adx_threshold: "normal"             # Medium trend strength requirement
   ema_fast: 16
   ema_slow: 48
   counter_trend_factor: 0.7
@@ -132,8 +128,7 @@ global:
   fast_length: 16
   slow_length: 32
   signal_length: 12
-  adx_period: 20
-  adx_threshold: 25
+  adx_threshold: "weak"               # Minimum trend requirement
   ema_fast: 12
   ema_slow: 34
   counter_trend_factor: 0.7
