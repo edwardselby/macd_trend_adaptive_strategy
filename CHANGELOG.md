@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
   - Added backward compatibility for numeric threshold values
 - Updated configuration validator to handle string-based ADX thresholds
 - Improved configuration summary display to show ADX threshold in human-readable format
+- Code tidy up
 
 ## [0.6.0] - 2025-03-25
 
