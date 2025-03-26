@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 class PerformanceTracker:
     """Tracks and manages trade performance metrics"""
 
+    SHORT = "short"
+    LONG = "long"
+
     def __init__(self, db_handler: DBHandler, max_recent_trades: int = 10):
         """
         Initialize with a database handler and configuration
@@ -36,7 +39,7 @@ class PerformanceTracker:
             trade: The completed trade
             profit_ratio: Profit ratio of the trade
         """
-        direction = 'short' if trade.is_short else 'long'
+        direction = self.SHORT if trade.is_short else self.LONG
         is_win = profit_ratio > 0
 
         # Update stats

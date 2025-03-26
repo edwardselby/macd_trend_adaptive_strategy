@@ -73,6 +73,13 @@ class MACDTrendAdaptiveStrategy(IStrategy):
     def __init__(self, config: dict) -> None:
         super().__init__(config)
 
+        self.is_backtest = (
+            config.get('runmode') in ('backtest', 'hyperopt') or
+            config.get('backtest', False) or
+            'timerange' in config or
+            'export' in config
+        )
+
         # Path to the configuration file
         config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strategy_config.yaml")
 
@@ -85,15 +92,8 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         self.startup_candle_count = self.strategy_config.startup_candle_count
 
         # Simplified database and performance tracking
-        self.db_handler = DBHandler(config)
+        self.db_handler = DBHandler(config, self.is_backtest)
         self.db_handler.set_strategy_name(self.__class__.__name__)
-
-        self.is_backtest = (
-            config.get('runmode') in ('backtest', 'hyperopt') or
-            config.get('backtest', False) or
-            'timerange' in config or
-            'export' in config
-        )
 
         if self.is_backtest:
             self.db_handler.clear_performance_data()

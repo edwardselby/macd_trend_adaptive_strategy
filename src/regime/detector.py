@@ -10,6 +10,10 @@ logger = logging.getLogger(__name__)
 class RegimeDetector:
     """Detects market regime based on performance metrics"""
 
+    NEUTRAL = "neutral"
+    BULLISH = "bullish"
+    BEARISH = "bearish"
+
     def __init__(self, performance_tracker: PerformanceTracker, config):
         """
         Initialize with performance tracker and configuration
@@ -42,8 +46,10 @@ class RegimeDetector:
         short_recent_trades = self.performance_tracker.get_recent_trades_count('short')
 
         # Default to neutral if we don't have enough recent data
-        if (long_recent_trades < self.config.min_recent_trades_per_direction or
-                short_recent_trades < self.config.min_recent_trades_per_direction):
+        if (
+            long_recent_trades < self.config.min_recent_trades_per_direction or
+            short_recent_trades < self.config.min_recent_trades_per_direction
+        ):
             log_regime_detection(
                 long_wr=long_win_rate,
                 short_wr=short_win_rate,
@@ -51,19 +57,19 @@ class RegimeDetector:
                 short_trades=short_recent_trades,
                 win_rate_diff=0,
                 threshold=self.config.min_recent_trades_per_direction,
-                regime="neutral"
+                regime=self.NEUTRAL
             )
-            return "neutral"
+            return self.NEUTRAL
 
         # Calculate win rate difference
         win_rate_difference = long_win_rate - short_win_rate
 
         # Determine regime based on relative performance
-        regime = "neutral"
+        regime = self.NEUTRAL
         if win_rate_difference > self.config.regime_win_rate_diff:
-            regime = "bullish"
+            regime = self.BULLISH
         elif win_rate_difference < -self.config.regime_win_rate_diff:
-            regime = "bearish"
+            regime = self.BEARISH
 
         log_regime_detection(
             long_wr=long_win_rate,
@@ -88,7 +94,7 @@ class RegimeDetector:
             bool: True if the trade is counter-trend, False otherwise
         """
         regime = self.detect_regime()
-        return (regime == "bearish" and direction == 'long') or (regime == "bullish" and direction == 'short')
+        return (regime == self.BEARISH and direction == 'long') or (regime == self.BULLISH and direction == 'short')
 
     def is_aligned_trend(self, direction: str) -> bool:
         """
@@ -101,4 +107,4 @@ class RegimeDetector:
             bool: True if the trade aligns with the trend, False otherwise
         """
         regime = self.detect_regime()
-        return (regime == "bullish" and direction == 'long') or (regime == "bearish" and direction == 'short')
+        return (regime == self.BULLISH and direction == 'long') or (regime == self.BEARISH and direction == 'short')

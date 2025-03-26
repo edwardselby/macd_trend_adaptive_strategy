@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Dict, Any
 
+
 try:
     import yaml
 except ImportError:
@@ -45,16 +46,6 @@ def load_config(config_path: str) -> Dict[str, Any]:
         # Basic validation
         if not isinstance(config_data, dict):
             raise ValueError(f"Configuration file {config_path} must contain a dictionary")
-
-        # Get valid timeframes from StrategyMode
-        from .strategy_config import StrategyMode
-        valid_timeframes = [mode.value for mode in StrategyMode if mode.value != "auto"]
-
-        # Check for at least one timeframe section or global section
-        timeframes = [tf for tf in config_data.keys() if tf in valid_timeframes]
-        if not timeframes and "global" not in config_data:
-            raise ValueError(
-                f"Configuration file {config_path} must contain at least one timeframe section {valid_timeframes} or a global section")
 
         return config_data
 

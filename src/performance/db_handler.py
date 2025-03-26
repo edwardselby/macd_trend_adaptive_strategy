@@ -10,11 +10,11 @@ logger = logging.getLogger(__name__)
 class DBHandler:
     """Handles database operations for performance tracking"""
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, is_backtest: bool = False) -> None:
         """Initialize with FreqTrade config"""
         self.config = config
         self.strategy_name = None  # Will be set by the strategy
-        self.is_backtest = config.get('runmode') in ('backtest', 'hyperopt')
+        self.is_backtest = is_backtest
 
         # Add caching for backtest mode
         if self.is_backtest:

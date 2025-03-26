@@ -150,10 +150,9 @@ def test_backtest_performance_clearing(mock_connect, mock_config):
     """Test that performance data is cleared when in backtest mode"""
     # Create a backtest config
     backtest_config = mock_config.copy()
-    backtest_config['runmode'] = 'backtest'
 
     # First, create a db_handler with backtest config
-    handler = DBHandler(backtest_config)
+    handler = DBHandler(backtest_config, True)
     handler.set_strategy_name("TestStrategy")
 
     # Setup mock connection and cursor
@@ -209,10 +208,10 @@ def test_backtest_optimization(mock_connect):
     """Test the in-memory caching and optimization for backtests"""
 
     # Create a backtest config
-    backtest_config = {'user_data_dir': '/tmp', 'runmode': 'backtest'}
+    backtest_config = {'user_data_dir': '/tmp'}
 
     # Initialize db handler with backtest config
-    handler = DBHandler(backtest_config)
+    handler = DBHandler(backtest_config, True)
     handler.set_strategy_name("TestStrategy")
 
     # Verify the in_memory_cache is initialized

@@ -29,21 +29,15 @@ class StoplossCalculator:
         """
         # Check if use_dynamic_stoploss is set and is False
         if hasattr(self.config, 'use_dynamic_stoploss') and not self.config.use_dynamic_stoploss:
-            # Use static_stoploss if available, otherwise calculate a backstop stoploss
-            if hasattr(self.config, 'static_stoploss'):
-                return self.config.static_stoploss
-            else:
-                # Calculate a fallback stoploss that's more negative than max_stoploss
-                return self.config.max_stoploss * 1.2
+            return getattr(self.config, 'static_stoploss', self.config.max_stoploss * 1.2)
 
         # Normalize win rate to 0-1 range for scaling
-        normalized_wr = max(0, min(1, (win_rate - self.config.min_win_rate) /
-                                   (self.config.max_win_rate - self.config.min_win_rate)))
+        win_rate_diff = (win_rate - self.config.min_win_rate) / (self.config.max_win_rate - self.config.min_win_rate)
+        normalized_wr = max(0, min(1, win_rate_diff))
 
         # Higher win rate = closer to max_stoploss (more negative, wider)
         # Lower win rate = closer to min_stoploss (less negative, tighter)
-        base_stoploss = self.config.min_stoploss + normalized_wr * (
-                self.config.max_stoploss - self.config.min_stoploss)
+        base_stoploss = self.config.min_stoploss + normalized_wr * (self.config.max_stoploss - self.config.min_stoploss)
 
         # Apply trend alignment factors
         factor = 1.0
@@ -74,7 +68,7 @@ class StoplossCalculator:
         return final_stoploss
 
     def calculate_stoploss_price(self, entry_rate: float, stoploss: float, is_short: bool) -> float:
-        """Original calculate_stoploss_price method - unchanged"""
+        """Original calculate_stoploss_price method"""
         if is_short:
             # For short trades, stoploss is reached when price goes UP
             stoploss_price = entry_rate * (1 - stoploss)  # Note the subtraction of negative number = addition
@@ -110,8 +104,6 @@ class StoplossCalculator:
         except Exception as e:
             logger.error(f"Error calculating fallback stoploss price: {e}")
 
-            # Use static_stoploss if available, otherwise use max_stoploss * 1.2
-            # This ensures the fallback is always a backstop value
             fallback_stoploss = getattr(self.config, 'static_stoploss', self.config.max_stoploss * 1.2)
 
             if is_short:

@@ -1,5 +1,4 @@
 import logging
-import os
 from typing import Dict, Any, List, Optional
 
 from .yaml_loader import load_config
@@ -72,10 +71,6 @@ class ConfigParser:
         self.config_path = config_path
         self.freqtrade_config = freqtrade_config
 
-        # Check if file exists
-        if not os.path.exists(config_path):
-            raise ValueError(f"Configuration file not found: {config_path}. A configuration file is required.")
-
         # Load the full config data once during initialization
         try:
             self.config_data = load_config(config_path)
@@ -92,6 +87,7 @@ class ConfigParser:
         Returns:
             Timeframe string (e.g. '1m', '5m', '15m')
         """
+
         if mode and mode != "auto":
             # Use explicitly provided mode
             return mode

@@ -11,8 +11,9 @@ class ROICalculator:
         self.config = config
 
         # Get default ROI from config or calculate a fallback value
-        default_roi = getattr(self.config, 'default_roi',
-                              abs(self.config.max_stoploss) * self.config.risk_reward_ratio * 1.2)
+        default_roi = getattr(
+            self.config, 'default_roi', abs(self.config.max_stoploss) * self.config.risk_reward_ratio * 1.2
+        )
 
         # Cache for ROI values to reduce recalculation frequency
         self.roi_cache = {
@@ -50,8 +51,14 @@ class ROICalculator:
 
         return final_roi
 
-    def update_roi_cache(self, current_timestamp: int, win_rates: dict,
-                         is_counter_trend_fn, is_aligned_trend_fn, calculate_dynamic_stoploss_fn) -> None:
+    def update_roi_cache(
+        self,
+        current_timestamp: int,
+        win_rates: dict,
+        is_counter_trend_fn,
+        is_aligned_trend_fn,
+        calculate_dynamic_stoploss_fn
+    ) -> None:
         """
         Update cached ROI values if needed
 
