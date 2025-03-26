@@ -8,6 +8,7 @@ from freqtrade.enums.exittype import ExitType
 from freqtrade.persistence import Trade
 from freqtrade.strategy.interface import IStrategy, ExitCheckTuple
 
+from .src.config.config_parser import ConfigParser
 from .src.config.strategy_config import StrategyConfig, StrategyMode
 from .src.indicators.technical import calculate_indicators, populate_entry_signals
 from .src.performance.db_handler import DBHandler
@@ -74,18 +75,10 @@ class MACDTrendAdaptiveStrategy(IStrategy):
 
         # Path to the configuration file
         config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strategy_config.yaml")
-        if not os.path.exists(config_path):
-            raise ValueError(
-                f"Configuration file not found at {config_path}. "
-                f"Please create a YAML configuration file before using this strategy."
-            )
 
-        # Auto-detect timeframe from FreqTrade config
-        self.strategy_config = StrategyConfig(
-            mode=self.STRATEGY_MODE,
-            config_path=config_path,
-            freqtrade_config=config
-        )
+        # Create config parser and strategy config
+        config_parser = ConfigParser(config_path=config_path, freqtrade_config=config)
+        self.strategy_config = StrategyConfig(self.STRATEGY_MODE, config_parser)
 
         # Set FreqTrade strategy parameters
         self.timeframe = self.strategy_config.timeframe
@@ -96,10 +89,10 @@ class MACDTrendAdaptiveStrategy(IStrategy):
         self.db_handler.set_strategy_name(self.__class__.__name__)
 
         self.is_backtest = (
-                config.get('runmode') in ('backtest', 'hyperopt') or
-                config.get('backtest', False) or
-                'timerange' in config or
-                'export' in config
+            config.get('runmode') in ('backtest', 'hyperopt') or
+            config.get('backtest', False) or
+            'timerange' in config or
+            'export' in config
         )
 
         if self.is_backtest:

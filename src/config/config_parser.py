@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from .yaml_loader import load_config
 
@@ -61,13 +61,54 @@ class ConfigParser:
         "extreme": 90  # Maximum trend strength
     }
 
-    @classmethod
-    def load_config(cls, config_path: str, timeframe: str) -> Dict[str, Any]:
+    def __init__(self, config_path: str, freqtrade_config: Optional[dict] = None):
         """
-        Load and validate configuration from YAML file
+        Initialize the config parser with configuration file path and FreqTrade config
 
         Args:
             config_path: Path to YAML configuration file
+            freqtrade_config: FreqTrade configuration for auto-detection
+        """
+        self.config_path = config_path
+        self.freqtrade_config = freqtrade_config
+
+        # Check if file exists
+        if not os.path.exists(config_path):
+            raise ValueError(f"Configuration file not found: {config_path}. A configuration file is required.")
+
+        # Load the full config data once during initialization
+        try:
+            self.config_data = load_config(config_path)
+        except Exception as e:
+            raise ValueError(f"Failed to load configuration from {config_path}: {e}")
+
+    def determine_timeframe(self, mode: str = None) -> str:
+        """
+        Determine which timeframe to use based on mode or auto-detection
+
+        Args:
+            mode: Strategy mode (timeframe) to use, or 'auto' for auto-detection
+
+        Returns:
+            Timeframe string (e.g. '1m', '5m', '15m')
+        """
+        if mode and mode != "auto":
+            # Use explicitly provided mode
+            return mode
+        elif self.freqtrade_config is not None:
+            # Auto-detect from FreqTrade config
+            timeframe = self.freqtrade_config.get('timeframe', '15m')
+            logger.info(f"Auto-detected timeframe: {timeframe}")
+            return timeframe
+        else:
+            # Default to 15m
+            return "15m"
+
+    def load_config_for_timeframe(self, timeframe: str) -> Dict[str, Any]:
+        """
+        Load and validate configuration for a specific timeframe
+
+        Args:
             timeframe: Timeframe to load configuration for (e.g. '1m', '5m', '15m')
 
         Returns:
@@ -76,45 +117,38 @@ class ConfigParser:
         Raises:
             ValueError: If configuration is invalid or missing required parameters
         """
-        # Check if file exists
-        if not os.path.exists(config_path):
-            raise ValueError(f"Configuration file not found: {config_path}")
-
-        # Load YAML config
-        try:
-            config_data = load_config(config_path)
-        except Exception as e:
-            raise ValueError(f"Failed to load configuration from {config_path}: {e}")
-
         # Get timeframe configuration
         timeframe_config = {}
 
         # First check if there's a timeframe-specific section
-        if timeframe in config_data:
-            timeframe_config.update(config_data[timeframe])
+        if timeframe in self.config_data:
+            timeframe_config.update(self.config_data[timeframe])
             logger.info(f"Loaded specific configuration for timeframe {timeframe}")
 
         # Then check for global settings
-        if "global" in config_data:
+        if "global" in self.config_data:
             # Only update keys that don't already exist
-            for key, value in config_data["global"].items():
+            for key, value in self.config_data["global"].items():
                 if key not in timeframe_config:
                     timeframe_config[key] = value
             logger.info("Applied global configuration settings")
 
         # Validate required parameters
-        errors = cls.validate_config(timeframe_config)
+        errors = self.validate_config(timeframe_config)
 
         if errors:
             error_message = f"Configuration errors for timeframe {timeframe}:\n" + "\n".join(errors)
             raise ValueError(error_message)
 
         # Process string-based adx_threshold
-        processed_config = cls._process_adx_threshold(timeframe_config)
+        processed_config = self._process_adx_threshold(timeframe_config)
 
         # Parse risk-reward ratio and calculate derived parameters
-        parsed_config = cls._parse_risk_reward_ratio(processed_config)
-        final_config = cls._calculate_derived_parameters(parsed_config)
+        parsed_config = self._parse_risk_reward_ratio(processed_config)
+        final_config = self._calculate_derived_parameters(parsed_config)
+
+        # Add timeframe to config
+        final_config['timeframe'] = timeframe
 
         return final_config
 

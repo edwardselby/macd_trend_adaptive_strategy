@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 import yaml
 
+from src.config.config_parser import ConfigParser
 from src.config.strategy_config import StrategyConfig, StrategyMode
 from src.performance.db_handler import DBHandler
 from src.performance.tracker import PerformanceTracker
@@ -99,9 +100,15 @@ def create_config_with_single_timeframe(timeframe="15m"):
 
 
 @pytest.fixture
-def strategy_config(mock_config_file):
+def mock_config_parser(mock_config_file):
+    """Create a ConfigParser using the mock_config_file fixture"""
+    return ConfigParser(config_path=mock_config_file)
+
+
+@pytest.fixture
+def strategy_config(mock_config_file, mock_config_parser):
     """Create a StrategyConfig instance from the sample YAML config"""
-    return StrategyConfig(mode=StrategyMode.DEFAULT, config_path=mock_config_file)
+    return StrategyConfig(mode=StrategyMode.DEFAULT, config_parser=mock_config_parser)
 
 
 @pytest.fixture

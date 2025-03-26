@@ -20,33 +20,22 @@ class StrategyMode(str, Enum):
 class StrategyConfig:
     """
     Container for strategy configuration values loaded from YAML files.
-    This class simply holds the values parsed by ConfigParser.
+    Uses ConfigParser for loading and parsing configuration data.
     """
 
-    def __init__(self, mode: 'StrategyMode' = None, config_path: str = None, freqtrade_config: dict = None):
+    def __init__(self, mode: 'StrategyMode', config_parser: ConfigParser):
         """
-        Initialize strategy configuration
+        Initialize strategy configuration using a ConfigParser
 
         Args:
             mode: Strategy mode (timeframe) to use
-            config_path: Path to config YAML file
-            freqtrade_config: FreqTrade configuration for auto-detection
+            config_parser: ConfigParser instance for loading configuration
         """
-        # Determine which timeframe to use
-        if mode is not None and mode != StrategyMode.AUTO:
-            # Use explicitly provided mode
-            self.timeframe = mode.value
-        elif freqtrade_config is not None:
-            # Auto-detect from FreqTrade config
-            self.timeframe = freqtrade_config.get('timeframe', '15m')
-            logger.info(f"Auto-detected timeframe: {self.timeframe}")
-        else:
-            # Default to 15m
-            self.timeframe = StrategyMode.DEFAULT.value
+        # Determine timeframe to use
+        self.timeframe = config_parser.determine_timeframe(mode.value)
 
-        # Load the configuration using the ConfigParser
-        # ConfigParser will raise ValueError if the file doesn't exist or has validation errors
-        config_values = ConfigParser.load_config(config_path, self.timeframe)
+        # Load configuration for the determined timeframe
+        config_values = config_parser.load_config_for_timeframe(self.timeframe)
 
         # Set all configuration values as attributes of this object
         for key, value in config_values.items():
