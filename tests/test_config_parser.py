@@ -211,7 +211,7 @@ def test_config_parser_with_missing_file():
 
 def test_config_parser_with_invalid_yaml(mock_config_file):
     """Test ConfigParser with invalid YAML content"""
-    with patch('src.config.yaml_loader.load_config', side_effect=Exception("YAML parsing error")):
+    with patch('src.config.config_parser.load_config', side_effect=Exception("YAML parsing error")):
         with pytest.raises(ValueError) as excinfo:
             ConfigParser(config_path=mock_config_file)
 

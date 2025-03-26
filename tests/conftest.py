@@ -66,7 +66,8 @@ def mock_config_file():
             "regime_win_rate_diff": 0.2,
             "min_recent_trades_per_direction": 5,
             "max_recent_trades": 10,
-            "startup_candle_count": 30
+            "startup_candle_count": 30,
+            "roi_cache_update_interval": 20,
         }
     }
 

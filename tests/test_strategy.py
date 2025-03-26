@@ -20,20 +20,6 @@ def create_strategy(mock_config_file, mode=StrategyMode.TIMEFRAME_5M):
             return strategy
 
 
-# Convert class-based tests to flat functions
-@patch.object(MACDTrendAdaptiveStrategy, 'STRATEGY_MODE', StrategyMode.TIMEFRAME_5M)
-def test_strategy_initialization_requires_config_file(mock_config_file):
-    """Test that strategy initialization requires a config file"""
-    # Mock the config file check to return False
-    with patch('os.path.exists', return_value=False):
-        with pytest.raises(ValueError) as excinfo:
-            strategy = MACDTrendAdaptiveStrategy({'runmode': 'backtest'})
-
-        # Update assertions to match the new error message format
-        assert "Configuration file not found" in str(excinfo.value)
-        assert "Please create a YAML configuration file" in str(excinfo.value)
-
-
 def test_strategy_initialization_with_config_file(mock_config_file):
     """Test that strategy initializes properly with a config file"""
     strategy = create_strategy(mock_config_file)

@@ -32,12 +32,12 @@ def test_strategy_config_with_different_timeframes(mock_config_parser):
 def test_strategy_config_with_auto_mode(mock_config_parser):
     """Test StrategyConfig with AUTO mode"""
     # Create a parser with FreqTrade config for auto-detection
-    freqtrade_config = {'timeframe': '30m'}
+    freqtrade_config = {'timeframe': '15m'}
     auto_parser = ConfigParser(config_path=mock_config_parser.config_path, freqtrade_config=freqtrade_config)
 
     # Test with AUTO mode
     config = StrategyConfig(mode=StrategyMode.AUTO, config_parser=auto_parser)
-    assert config.timeframe == '30m'
+    assert config.timeframe == '15m'
 
 
 def test_strategy_config_summary(mock_config_parser):
