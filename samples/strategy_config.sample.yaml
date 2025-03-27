@@ -34,11 +34,11 @@ global:
   static_stoploss: -0.03              # Fallback stoploss value
   
   # MACD parameters
-  macd_preset: "rapid"
+  macd_preset: "rapid"                # Signal generator (rapid, responsive, classic, conservative, delayed)
   
   # Trend detection parameters
-  adx_threshold: "strong"             # Trend strength requirement (weak, normal, strong, extreme)
-  ema_preset: "ultra_short"           # Ultra short EMA settings for 1m timeframe
+  adx_threshold: "weak"               # Trend strength detection (slight, weak, moderate, strong, extreme)
+  ema_preset: "ultra_short"           # Trend direction detection (ultra_short, short, medium, long, ultra_long)
 
   # Risk factors (override globals)
   counter_trend_factor: 0.3           # More conservative for 1m timeframe
