@@ -46,6 +46,7 @@ ENV/
 env.bak/
 venv.bak/
 .python-version
+strategy_config.yaml
 
 # IDE specific files
 .idea/
