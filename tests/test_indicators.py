@@ -1,7 +1,8 @@
-from src.indicators.technical import calculate_indicators, populate_entry_signals
 import pytest
+
 from src.config.config_parser import ConfigParser
 from src.config.strategy_config import StrategyConfig, StrategyMode
+from src.indicators.technical import calculate_indicators, populate_entry_signals
 
 
 def test_calculate_indicators(sample_dataframe, strategy_config):

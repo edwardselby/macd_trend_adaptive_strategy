@@ -1,10 +1,3 @@
-import os
-import pytest
-from unittest.mock import patch, MagicMock
-
-from src.config.config_parser import ConfigParser
-
-
 def test_config_parser_initialization(mock_config_file):
     """Test that ConfigParser initializes correctly with a valid config file"""
     parser = ConfigParser(config_path=mock_config_file)
@@ -218,8 +211,9 @@ def test_config_parser_with_invalid_yaml(mock_config_file):
         assert "Failed to load configuration" in str(excinfo.value)
 
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from src.config.config_parser import ConfigParser
 
