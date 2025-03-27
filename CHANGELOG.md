@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.0] - 2025-03-27
+
 ### Changed
 - Enhanced ADX configuration with 5 named presets:
   - Added `slight` (10) for barely trending markets
@@ -17,6 +19,9 @@ All notable changes to this project will be documented in this file.
   - "long": Longer term trend detection (Fast: 12, Slow: 50)
   - "ultra_long": Very long term trend detection (Fast: 20, Slow: 100)
 - Support for EMA preset overrides to customize individual parameters
+
+### Fixed
+- Use AND instead of OR to determine trend between ADX and EMA indicator
 
 ## [0.7.0] - 2025-03-27
 

@@ -31,12 +31,12 @@ def calculate_indicators(dataframe: DataFrame, config) -> DataFrame:
 
     # Determine trend conditions
     dataframe['uptrend'] = (
-        ((dataframe['adx'] > config.adx_threshold) & (dataframe['plus_di'] > dataframe['minus_di'])) |
+        ((dataframe['adx'] > config.adx_threshold) & (dataframe['plus_di'] > dataframe['minus_di'])) &
         (dataframe['ema_fast'] > dataframe['ema_slow'])
     )
 
     dataframe['downtrend'] = (
-        ((dataframe['adx'] > config.adx_threshold) & (dataframe['minus_di'] > dataframe['plus_di'])) |
+        ((dataframe['adx'] > config.adx_threshold) & (dataframe['minus_di'] > dataframe['plus_di'])) &
         (dataframe['ema_fast'] < dataframe['ema_slow'])
     )
 
