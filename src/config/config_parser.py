@@ -26,7 +26,7 @@ class ConfigParser:
         'signal_length': (int, "Signal line period for MACD"),
 
         # Trend detection parameters
-        'adx_threshold': ((str, int, float), "ADX threshold for trend detection"),
+        'adx_threshold': ((str, int, float), "ADX threshold for trend detection (slight/weak/moderate/strong/extreme)"),
         'ema_fast': (int, "Fast EMA period for trend detection"),
         'ema_slow': (int, "Slow EMA period for trend detection"),
 
@@ -55,10 +55,11 @@ class ConfigParser:
 
     # ADX strength constants for converting string to numeric values
     ADX_STRENGTH = {
-        "weak": 25,  # Minimum trend requirement
-        "normal": 50,  # Medium trend strength
-        "strong": 75,  # Strong trend strength
-        "extreme": 90  # Maximum trend strength
+        "slight": 10,  # Barely trending market
+        "weak": 30,  # Mild trend strength
+        "moderate": 50,  # Medium trend strength
+        "strong": 70,  # Strong trend momentum
+        "extreme": 90  # Very strong trending market
     }
 
     # Add this constant to the ConfigParser class
@@ -276,10 +277,10 @@ class ConfigParser:
             if adx_str in cls.ADX_STRENGTH:
                 result['adx_threshold'] = cls.ADX_STRENGTH[adx_str]
             else:
-                # Invalid string value, log warning and use Normal
-                logger.warning(f"Invalid ADX threshold '{adx_str}', using 'normal' (50)")
-                result['adx_threshold'] = cls.ADX_STRENGTH['normal']
-                result['adx_threshold_str'] = 'normal'
+                # Invalid string value, log warning and use moderate
+                logger.warning(f"Invalid ADX threshold '{adx_str}', using 'moderate' (50)")
+                result['adx_threshold'] = cls.ADX_STRENGTH['moderate']
+                result['adx_threshold_str'] = 'moderate'
 
         return result
 

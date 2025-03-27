@@ -59,7 +59,7 @@ global:
   min_stoploss: -0.0088
   max_stoploss: -0.0175
   macd_preset: "responsive"
-  adx_threshold: "normal"
+  adx_threshold: "moderate"
   ema_fast: 5
   ema_slow: 28
   counter_trend_factor: 0.9
@@ -97,7 +97,7 @@ global:
   min_stoploss: -0.0058
   max_stoploss: -0.0138
   macd_preset: "conservative"
-  adx_threshold: "normal"
+  adx_threshold: "moderate"
   ema_fast: 16
   ema_slow: 48
   counter_trend_factor: 0.7

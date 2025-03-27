@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Enhanced ADX configuration with 5 named presets:
+  - Added `slight` (10) for barely trending markets
+  - Renamed `normal` to `moderate` and adjusted values
+  - Updated preset values to more evenly distributed thresholds (10/30/50/70/90)
+  - Improved documentation and tests for all ADX threshold options
+
 ## [0.7.0] - 2025-03-27
 
 ### Added

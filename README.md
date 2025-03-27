@@ -341,14 +341,33 @@ The strategy configuration includes the following parameter categories:
 To make the strategy more user-friendly, the ADX configuration has been simplified:
 - No need to set `adx_period` anymore (fixed at standard value of 14)
 - `adx_threshold` now accepts human-readable values:
-  - `weak`: Minimum trend requirement (value: 25)
-  - `normal`: Medium trend strength (value: 50)
-  - `strong`: Strong trend strength (value: 75)
-  - `extreme`: Maximum trend strength (value: 90)
+  - `slight`: Barely trending market (value: 10)
+  - `weak`: Mild trend strength (value: 30)
+  - `moderate`: Medium trend strength (value: 50)
+  - `strong`: Strong trend momentum (value: 70)
+  - `extreme`: Very strong trending market (value: 90)
 
 Example configuration:
 ```yaml
-adx_threshold: "normal"  # Medium trend strength requirement
+adx_threshold: "moderate"  # Medium trend strength requirement
+```
+### Simplified MACD Configuration
+
+The strategy offers predefined MACD parameter sets to simplify configuration:
+- `rapid`: Ultra-fast response for very short timeframes (fast: 3, slow: 8, signal: 2)
+- `responsive`: Quick response for short timeframes (fast: 5, slow: 13, signal: 3)
+- `classic`: Standard MACD settings (fast: 12, slow: 26, signal: 9)
+- `conservative`: Reduced noise for medium timeframes (fast: 8, slow: 21, signal: 5)
+- `delayed`: Slower response for higher timeframes (fast: 13, slow: 34, signal: 8)
+
+Example configuration:
+```yaml
+# Use a preset
+macd_preset: "classic"
+
+# Or override specific parameters
+macd_preset: "delayed"
+fast_length: 10  # Override just the fast length
 ```
 
 ## Strategy Logic

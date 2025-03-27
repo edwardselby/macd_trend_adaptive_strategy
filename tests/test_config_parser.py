@@ -83,19 +83,20 @@ def test_load_config_for_timeframe_with_global_fallback(mock_config_file):
 def test_process_adx_threshold():
     """Test ADX threshold string to numeric value conversion"""
     # Test with known string values
-    assert ConfigParser._process_adx_threshold({'adx_threshold': 'weak'})['adx_threshold'] == 25
-    assert ConfigParser._process_adx_threshold({'adx_threshold': 'normal'})['adx_threshold'] == 50
-    assert ConfigParser._process_adx_threshold({'adx_threshold': 'strong'})['adx_threshold'] == 75
+    assert ConfigParser._process_adx_threshold({'adx_threshold': 'slight'})['adx_threshold'] == 10
+    assert ConfigParser._process_adx_threshold({'adx_threshold': 'weak'})['adx_threshold'] == 30
+    assert ConfigParser._process_adx_threshold({'adx_threshold': 'moderate'})['adx_threshold'] == 50
+    assert ConfigParser._process_adx_threshold({'adx_threshold': 'strong'})['adx_threshold'] == 70
     assert ConfigParser._process_adx_threshold({'adx_threshold': 'extreme'})['adx_threshold'] == 90
 
     # Test with numeric value (should remain unchanged)
     assert ConfigParser._process_adx_threshold({'adx_threshold': 42})['adx_threshold'] == 42
 
-    # Test with invalid string value (should default to "normal")
+    # Test with invalid string value (should default to "moderate")
     with patch('logging.Logger.warning') as mock_warning:
         result = ConfigParser._process_adx_threshold({'adx_threshold': 'invalid'})
         assert result['adx_threshold'] == 50
-        assert result['adx_threshold_str'] == 'normal'
+        assert result['adx_threshold_str'] == 'moderate'
         mock_warning.assert_called_once()
 
 
