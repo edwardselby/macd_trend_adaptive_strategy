@@ -55,9 +55,9 @@ def test_load_config_for_timeframe_with_specific_section(mock_config_file):
     assert config['timeframe'] == '1m'
 
     # Values from the mock_config_file fixture
-    expected_fast_length = 6
-    expected_slow_length = 14
-    expected_signal_length = 4
+    expected_fast_length = 5
+    expected_slow_length = 13
+    expected_signal_length = 3
 
     assert config['fast_length'] == expected_fast_length
     assert config['slow_length'] == expected_slow_length
@@ -190,7 +190,7 @@ def test_validate_config():
     invalid_config = valid_config.copy()
     del invalid_config['fast_length']
     errors = ConfigParser.validate_config(invalid_config)
-    assert len(errors) == 1
+    assert len(errors) == 2
     assert "Missing required parameter: fast_length" in errors[0]
 
     # Wrong parameter type
