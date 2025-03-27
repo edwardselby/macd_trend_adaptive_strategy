@@ -26,10 +26,8 @@ def mock_config_file():
             "risk_reward_ratio": "1:1.5",
             "min_stoploss": -0.01,      # Closer to zero (tighter)
             "max_stoploss": -0.03,      # Further from zero (wider)
-            "fast_length": 6,
-            "slow_length": 14,
-            "signal_length": 4,
-            "adx_threshold": "strong",  # Changed from numeric to string
+            "macd_preset": "responsive", # Use Responsive preset for 1m
+            "adx_threshold": "strong",
             "ema_fast": 3,
             "ema_slow": 10
         },
@@ -37,10 +35,8 @@ def mock_config_file():
             "risk_reward_ratio": "1:2",
             "min_stoploss": -0.0125,    # Closer to zero (tighter)
             "max_stoploss": -0.0275,    # Further from zero (wider)
-            "fast_length": 12,
-            "slow_length": 26,
-            "signal_length": 9,
-            "adx_threshold": "normal",  # Changed from numeric to string
+            "macd_preset": "classic",   # Use Classic preset for 5m
+            "adx_threshold": "normal",
             "ema_fast": 8,
             "ema_slow": 21
         },
@@ -48,10 +44,22 @@ def mock_config_file():
             "risk_reward_ratio": "1:2",
             "min_stoploss": -0.0125,    # Closer to zero (tighter)
             "max_stoploss": -0.0275,    # Further from zero (wider)
+            # Custom MACD parameters (no preset)
             "fast_length": 12,
             "slow_length": 26,
             "signal_length": 9,
-            "adx_threshold": "normal",  # Changed from numeric to string
+            "adx_threshold": "normal",
+            "ema_fast": 8,
+            "ema_slow": 21
+        },
+        # Add a timeframe with mixed preset and override
+        "30m": {
+            "risk_reward_ratio": "1:2",
+            "min_stoploss": -0.0125,
+            "max_stoploss": -0.0275,
+            "macd_preset": "delayed",   # Use Delayed preset
+            "fast_length": 10,          # Override one parameter
+            "adx_threshold": "weak",
             "ema_fast": 8,
             "ema_slow": 21
         },

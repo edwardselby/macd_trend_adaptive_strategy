@@ -50,6 +50,7 @@ class ConfigParser:
         'max_recent_trades': (int, "Maximum number of recent trades to track"),
         'startup_candle_count': (int, "Number of warmup candles required"),
         'roi_cache_update_interval': (int, "Seconds between ROI cache updates"),
+        'macd_preset': (str, "Named parameter set for MACD"),
     }
 
     # ADX strength constants for converting string to numeric values
@@ -58,6 +59,35 @@ class ConfigParser:
         "normal": 50,  # Medium trend strength
         "strong": 75,  # Strong trend strength
         "extreme": 90  # Maximum trend strength
+    }
+
+    # Add this constant to the ConfigParser class
+    MACD_PRESETS = {
+        "delayed": {
+            "fast_length": 13,
+            "slow_length": 34,
+            "signal_length": 8
+        },
+        "conservative": {
+            "fast_length": 8,
+            "slow_length": 21,
+            "signal_length": 5
+        },
+        "classic": {
+            "fast_length": 12,
+            "slow_length": 26,
+            "signal_length": 9
+        },
+        "responsive": {
+            "fast_length": 5,
+            "slow_length": 13,
+            "signal_length": 3
+        },
+        "rapid": {
+            "fast_length": 3,
+            "slow_length": 8,
+            "signal_length": 2
+        }
     }
 
     def __init__(self, config_path: str, freqtrade_config: Optional[dict] = None):
@@ -139,6 +169,9 @@ class ConfigParser:
         # Process string-based adx_threshold
         processed_config = self._process_adx_threshold(timeframe_config)
 
+        # Process MACD parameters
+        processed_config = self._process_macd_parameters(processed_config)
+
         # Parse risk-reward ratio and calculate derived parameters
         parsed_config = self._parse_risk_reward_ratio(processed_config)
         final_config = self._calculate_derived_parameters(parsed_config)
@@ -163,6 +196,8 @@ class ConfigParser:
 
         # Check required parameters
         for param_name, (param_type, description) in cls.PARAMETER_SCHEMA.items():
+            if param_name in ['fast_length', 'slow_length', 'signal_length'] and 'macd_preset' in config:
+                continue
             if param_name not in config:
                 errors.append(f"Missing required parameter: {param_name} - {description}")
                 continue
@@ -190,6 +225,14 @@ class ConfigParser:
                     else:
                         errors.append(
                             f"Parameter {param_name} has incorrect type: expected {param_type.__name__}, got {type(value).__name__}")
+
+        # Check if we have either all MACD parameters or a preset
+        has_all_macd_params = all(param in config for param in ['fast_length', 'slow_length', 'signal_length'])
+        has_macd_preset = 'macd_preset' in config
+
+        if not has_all_macd_params and not has_macd_preset:
+            errors.append(
+                "Missing MACD configuration: must specify either macd_preset or all MACD parameters (fast_length, slow_length, signal_length)")
 
         return errors
 
@@ -237,6 +280,46 @@ class ConfigParser:
                 logger.warning(f"Invalid ADX threshold '{adx_str}', using 'normal' (50)")
                 result['adx_threshold'] = cls.ADX_STRENGTH['normal']
                 result['adx_threshold_str'] = 'normal'
+
+        return result
+
+    @classmethod
+    def _process_macd_parameters(cls, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process MACD parameter sets from configuration
+
+        Args:
+            config: Configuration dictionary
+
+        Returns:
+            Updated configuration with processed MACD parameters
+        """
+        result = config.copy()
+
+        # Check if macd_preset is specified
+        if 'macd_preset' in result:
+            preset_name = result['macd_preset']
+
+            # Store original preset name
+            result['macd_preset_str'] = preset_name
+
+            # Check if preset exists
+            if preset_name in cls.MACD_PRESETS:
+                # Apply preset parameters (only if not explicitly defined)
+                preset = cls.MACD_PRESETS[preset_name]
+                for param, value in preset.items():
+                    if param not in result:
+                        result[param] = value
+
+                logger.info(f"Applied MACD preset '{preset_name}': {preset}")
+            else:
+                # Invalid preset name, log warning and use Classic
+                logger.warning(f"Invalid MACD preset '{preset_name}', using 'Classic'")
+                for param, value in cls.MACD_PRESETS["Classic"].items():
+                    if param not in result:
+                        result[param] = value
+
+                result['macd_preset_str'] = "Classic"
 
         return result
 
