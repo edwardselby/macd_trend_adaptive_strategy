@@ -314,12 +314,12 @@ class ConfigParser:
                 logger.info(f"Applied MACD preset '{preset_name}': {preset}")
             else:
                 # Invalid preset name, log warning and use Classic
-                logger.warning(f"Invalid MACD preset '{preset_name}', using 'Classic'")
-                for param, value in cls.MACD_PRESETS["Classic"].items():
+                logger.warning(f"Invalid MACD preset '{preset_name}', using 'classic'")
+                for param, value in cls.MACD_PRESETS["classic"].items():
                     if param not in result:
                         result[param] = value
 
-                result['macd_preset_str'] = "Classic"
+                result['macd_preset_str'] = "classic"
 
         return result
 

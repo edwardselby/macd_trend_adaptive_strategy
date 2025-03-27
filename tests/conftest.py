@@ -18,33 +18,31 @@ from src.risk_management.roi_calculator import ROICalculator
 from src.risk_management.stoploss_calculator import StoplossCalculator
 
 
-@pytest.fixture
-def mock_config_file():
-    """Create a temporary YAML config file with comprehensive test settings"""
-    config_data = {
+def get_mock_config_data():
+    """Define the mock configuration data for tests"""
+    return {
         "1m": {
             "risk_reward_ratio": "1:1.5",
-            "min_stoploss": -0.01,      # Closer to zero (tighter)
-            "max_stoploss": -0.03,      # Further from zero (wider)
-            "macd_preset": "responsive", # Use Responsive preset for 1m
+            "min_stoploss": -0.01,
+            "max_stoploss": -0.03,
+            "macd_preset": "responsive",
             "adx_threshold": "strong",
             "ema_fast": 3,
             "ema_slow": 10
         },
         "5m": {
             "risk_reward_ratio": "1:2",
-            "min_stoploss": -0.0125,    # Closer to zero (tighter)
-            "max_stoploss": -0.0275,    # Further from zero (wider)
-            "macd_preset": "classic",   # Use Classic preset for 5m
+            "min_stoploss": -0.0125,
+            "max_stoploss": -0.0275,
+            "macd_preset": "classic",
             "adx_threshold": "normal",
             "ema_fast": 8,
             "ema_slow": 21
         },
         "15m": {
             "risk_reward_ratio": "1:2",
-            "min_stoploss": -0.0125,    # Closer to zero (tighter)
-            "max_stoploss": -0.0275,    # Further from zero (wider)
-            # Custom MACD parameters (no preset)
+            "min_stoploss": -0.0125,
+            "max_stoploss": -0.0275,
             "fast_length": 12,
             "slow_length": 26,
             "signal_length": 9,
@@ -52,13 +50,12 @@ def mock_config_file():
             "ema_fast": 8,
             "ema_slow": 21
         },
-        # Add a timeframe with mixed preset and override
         "30m": {
             "risk_reward_ratio": "1:2",
             "min_stoploss": -0.0125,
             "max_stoploss": -0.0275,
-            "macd_preset": "delayed",   # Use Delayed preset
-            "fast_length": 10,          # Override one parameter
+            "macd_preset": "delayed",
+            "fast_length": 10,
             "adx_threshold": "weak",
             "ema_fast": 8,
             "ema_slow": 21
@@ -79,6 +76,12 @@ def mock_config_file():
         }
     }
 
+
+@pytest.fixture
+def mock_config_file():
+    """Create a temporary YAML config file with comprehensive test settings"""
+    config_data = get_mock_config_data()
+
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as temp_file:
         yaml.dump(config_data, temp_file)
         temp_file_path = temp_file.name
@@ -89,23 +92,26 @@ def mock_config_file():
     os.unlink(temp_file_path)
 
 
-def create_config_with_single_timeframe(timeframe="15m"):
-    """Create a config dictionary with only one timeframe section"""
-    config_data = {
-        timeframe: {
-            "risk_reward_ratio": "1:2",
-            "min_stoploss": -0.0125,
-            "max_stoploss": -0.0275,
-            "fast_length": 12,
-            "slow_length": 26,
-            "signal_length": 9,
-            "adx_period": 14,
-            "adx_threshold": 25,
-            "ema_fast": 8,
-            "ema_slow": 21
-        }
+@pytest.fixture
+def mock_config_single_timeframe(request):
+    """Create a config file with only a single timeframe section"""
+    timeframe = request.param if hasattr(request, 'param') else "15m"
+    config_data = get_mock_config_data()
+
+    # Extract only the specified timeframe and global section
+    single_tf_config = {
+        timeframe: config_data[timeframe],
+        "global": config_data["global"]
     }
-    return config_data
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as temp_file:
+        yaml.dump(single_tf_config, temp_file)
+        temp_file_path = temp_file.name
+
+    yield temp_file_path
+
+    # Clean up the temporary file
+    os.unlink(temp_file_path)
 
 
 @pytest.fixture

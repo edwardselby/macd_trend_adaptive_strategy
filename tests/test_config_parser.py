@@ -216,3 +216,140 @@ def test_config_parser_with_invalid_yaml(mock_config_file):
             ConfigParser(config_path=mock_config_file)
 
         assert "Failed to load configuration" in str(excinfo.value)
+
+
+import pytest
+from unittest.mock import patch, MagicMock
+
+from src.config.config_parser import ConfigParser
+
+
+def test_process_macd_parameters():
+    """Test MACD preset processing with various scenarios"""
+    # Test with valid preset and no overrides
+    result = ConfigParser._process_macd_parameters({"macd_preset": "classic"})
+    assert "fast_length" in result
+    assert "slow_length" in result
+    assert "signal_length" in result
+    assert result["fast_length"] == 12  # Classic preset values
+    assert result["slow_length"] == 26
+    assert result["signal_length"] == 9
+    assert result["macd_preset_str"] == "classic"
+
+    # Test with valid preset and parameter override
+    result = ConfigParser._process_macd_parameters({
+        "macd_preset": "responsive",
+        "fast_length": 8  # Override default
+    })
+    assert result["fast_length"] == 8  # Should use override value
+    assert result["slow_length"] == 13  # Should use preset value
+    assert result["signal_length"] == 3  # Should use preset value
+    assert result["macd_preset_str"] == "responsive"
+
+    # Test with invalid preset (should fall back to Classic)
+    with patch('logging.Logger.warning') as mock_warning:
+        result = ConfigParser._process_macd_parameters({"macd_preset": "nonexistent_preset"})
+        assert result["fast_length"] == 12  # Classic preset values
+        assert result["slow_length"] == 26
+        assert result["signal_length"] == 9
+        assert result["macd_preset_str"] == "classic"
+        mock_warning.assert_called_once()
+
+    # Test with case-insensitive preset name
+    result = ConfigParser._process_macd_parameters({"macd_preset": "CLASSIC"})
+    assert result["fast_length"] == 12
+    assert result["macd_preset_str"] == "classic"
+
+    # Test with only explicit parameters (no preset)
+    config = {
+        "fast_length": 15,
+        "slow_length": 30,
+        "signal_length": 10
+    }
+    result = ConfigParser._process_macd_parameters(config)
+    assert result["fast_length"] == 15
+    assert result["slow_length"] == 30
+    assert result["signal_length"] == 10
+    assert "macd_preset_str" not in result
+
+
+def test_validate_config_with_macd_presets():
+    """Test configuration validation with MACD presets"""
+    # Valid config with preset
+    valid_config_with_preset = {
+        "risk_reward_ratio": "1:2",
+        "min_stoploss": -0.01,
+        "max_stoploss": -0.03,
+        "macd_preset": "classic",  # Use preset instead of individual parameters
+        "adx_threshold": "strong",
+        "ema_fast": 3,
+        "ema_slow": 10,
+        "counter_trend_factor": 0.5,
+        "aligned_trend_factor": 1.0,
+        "counter_trend_stoploss_factor": 0.5,
+        "aligned_trend_stoploss_factor": 1.0
+    }
+
+    errors = ConfigParser.validate_config(valid_config_with_preset)
+    assert len(errors) == 0, "Valid config with preset should have no errors"
+
+    # Test config with both preset and explicit parameters (valid)
+    mixed_config = valid_config_with_preset.copy()
+    mixed_config["fast_length"] = 8  # Override preset parameter
+    errors = ConfigParser.validate_config(mixed_config)
+    assert len(errors) == 0, "Valid config with preset and override should have no errors"
+
+    # Test config with neither preset nor required MACD parameters
+    invalid_config = valid_config_with_preset.copy()
+    del invalid_config["macd_preset"]
+    errors = ConfigParser.validate_config(invalid_config)
+    assert len(errors) == 4  # 3 missing parameters + 1 general message
+    assert any("Missing MACD configuration" in error for error in errors)
+    assert any("fast_length" in error for error in errors)
+    assert any("slow_length" in error for error in errors)
+    assert any("signal_length" in error for error in errors)
+
+
+def test_load_config_with_macd_preset(mock_config_file):
+    """Test loading configuration with MACD preset processing"""
+    parser = ConfigParser(config_path=mock_config_file)
+
+    # Load config for 5m timeframe (has macd_preset: "classic")
+    config = parser.load_config_for_timeframe('5m')
+
+    # Verify preset was processed correctly
+    assert config['fast_length'] == 12  # Classic preset value
+    assert config['slow_length'] == 26  # Classic preset value
+    assert config['signal_length'] == 9  # Classic preset value
+    assert config['macd_preset_str'] == 'classic'
+
+    # Load config for 30m timeframe (has preset with override)
+    config = parser.load_config_for_timeframe('30m')
+
+    # Verify preset was processed with override
+    assert config['fast_length'] == 10  # Overridden value
+    assert config['slow_length'] == 34  # Delayed preset value
+    assert config['signal_length'] == 8  # Delayed preset value
+    assert config['macd_preset_str'] == 'delayed'
+
+    # Load config for 15m timeframe (has explicit parameters, no preset)
+    config = parser.load_config_for_timeframe('15m')
+
+    # Verify explicit parameters were preserved
+    assert config['fast_length'] == 12  # Explicit value
+    assert config['slow_length'] == 26  # Explicit value
+    assert config['signal_length'] == 9  # Explicit value
+    assert 'macd_preset_str' not in config
+
+
+@pytest.mark.parametrize('mock_config_single_timeframe', ["5m"], indirect=True)
+def test_load_config_with_only_preset(mock_config_single_timeframe):
+    """Test loading configuration with only MACD preset specified"""
+    parser = ConfigParser(config_path=mock_config_single_timeframe)
+    config = parser.load_config_for_timeframe('5m')
+
+    # Verify preset values were applied
+    assert config['fast_length'] == 12  # Classic preset value
+    assert config['slow_length'] == 26  # Classic preset value
+    assert config['signal_length'] == 9  # Classic preset value
+    assert config['macd_preset_str'] == 'classic'

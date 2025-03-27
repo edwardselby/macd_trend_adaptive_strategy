@@ -1,6 +1,7 @@
 from datetime import datetime
 from unittest.mock import patch, MagicMock, ANY
 
+import pandas as pd
 import pytest
 from freqtrade.enums.exittype import ExitType
 from freqtrade.persistence import Trade
@@ -559,3 +560,49 @@ def test_regime_alignment_flags(mock_config_file, regime, aligned_dir, direction
         cleanup_patchers(patchers)
         dt_patcher.stop()
         trade_id_patcher.stop()
+
+
+@pytest.mark.parametrize('mode,macd_preset', [
+    (StrategyMode.TIMEFRAME_5M, "classic"),
+    (StrategyMode.TIMEFRAME_1M, "responsive"),
+    (StrategyMode.TIMEFRAME_30M, "delayed")
+])
+def test_strategy_initialization_with_macd_preset(mock_config_file, mode, macd_preset):
+    """Test that strategy initializes correctly with MACD preset parameters"""
+    with patch.object(MACDTrendAdaptiveStrategy, 'STRATEGY_MODE', mode):
+        with patch('os.path.join', return_value=mock_config_file):
+            strategy = MACDTrendAdaptiveStrategy({'runmode': 'backtest'})
+
+            # Verify timeframe matches the mode
+            assert strategy.timeframe == mode.value
+
+            # Verify MACD preset was correctly processed
+            expected_preset = macd_preset
+            if mode == StrategyMode.TIMEFRAME_30M:
+                # 30m timeframe has a fast_length override
+                assert strategy.strategy_config.fast_length == 10  # Overridden value
+
+            # Verify preset name was stored
+            assert hasattr(strategy.strategy_config, 'macd_preset_str')
+            assert strategy.strategy_config.macd_preset_str == expected_preset
+
+            # Test that populate_indicators correctly uses the preset parameters
+            # by creating a small test dataframe
+            small_df = pd.DataFrame({
+                'open': [100, 101, 102, 103, 104],
+                'high': [105, 106, 107, 108, 109],
+                'low': [95, 96, 97, 98, 99],
+                'close': [101, 102, 103, 104, 105],
+                'volume': [1000, 1000, 1000, 1000, 1000],
+            })
+
+            # Mock the indicator calculation to ensure it uses the correct parameters
+            with patch('src.indicators.technical.ta.MACD') as mock_macd:
+                strategy.populate_indicators(small_df, {'pair': 'BTC/USDT'})
+
+                # Verify MACD was called with the correct parameters from the preset
+                mock_macd.assert_called_once()
+                call_kwargs = mock_macd.call_args[1]
+                assert call_kwargs['fastperiod'] == strategy.strategy_config.fast_length
+                assert call_kwargs['slowperiod'] == strategy.strategy_config.slow_length
+                assert call_kwargs['signalperiod'] == strategy.strategy_config.signal_length
