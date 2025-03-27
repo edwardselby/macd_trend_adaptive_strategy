@@ -1,3 +1,10 @@
+from unittest.mock import patch
+
+import pytest
+
+from src.config.config_parser import ConfigParser
+
+
 def test_config_parser_initialization(mock_config_file):
     """Test that ConfigParser initializes correctly with a valid config file"""
     parser = ConfigParser(config_path=mock_config_file)
@@ -212,13 +219,6 @@ def test_config_parser_with_invalid_yaml(mock_config_file):
         assert "Failed to load configuration" in str(excinfo.value)
 
 
-from unittest.mock import patch
-
-import pytest
-
-from src.config.config_parser import ConfigParser
-
-
 def test_process_macd_parameters():
     """Test MACD preset processing with various scenarios"""
     # Test with valid preset and no overrides
@@ -348,3 +348,41 @@ def test_load_config_with_only_preset(mock_config_single_timeframe):
     assert config['slow_length'] == 26  # Classic preset value
     assert config['signal_length'] == 9  # Classic preset value
     assert config['macd_preset_str'] == 'classic'
+
+
+def test_process_ema_parameters(caplog):
+    """Test EMA preset processing with various scenarios"""
+    # Test with valid preset and no overrides
+    result = ConfigParser._process_ema_parameters({"ema_preset": "medium"})
+    assert "ema_fast" in result
+    assert "ema_slow" in result
+    assert result["ema_fast"] == 8  # Medium preset values
+    assert result["ema_slow"] == 30
+    assert result["ema_preset_str"] == "medium"
+
+    # Test with valid preset and parameter override
+    result = ConfigParser._process_ema_parameters({
+        "ema_preset": "short",
+        "ema_fast": 7  # Override default
+    })
+    assert result["ema_fast"] == 7  # Should use override value
+    assert result["ema_slow"] == 20  # Should use preset value
+    assert result["ema_preset_str"] == "short"
+
+    # Test with invalid preset (should fall back to medium)
+    caplog.clear()
+    result = ConfigParser._process_ema_parameters({"ema_preset": "nonexistent_preset"})
+    assert result["ema_fast"] == 8  # Medium preset values
+    assert result["ema_slow"] == 30
+    assert result["ema_preset_str"] == "medium"
+    assert "Invalid EMA preset" in caplog.text  # Check log message
+
+    # Test with only explicit parameters (no preset)
+    config = {
+        "ema_fast": 15,
+        "ema_slow": 60
+    }
+    result = ConfigParser._process_ema_parameters(config)
+    assert result["ema_fast"] == 15
+    assert result["ema_slow"] == 60
+    assert "ema_preset_str" not in result

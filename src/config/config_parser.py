@@ -51,6 +51,7 @@ class ConfigParser:
         'startup_candle_count': (int, "Number of warmup candles required"),
         'roi_cache_update_interval': (int, "Seconds between ROI cache updates"),
         'macd_preset': (str, "Named parameter set for MACD"),
+        'ema_preset': (str, "Named parameter set for EMA"),
     }
 
     # ADX strength constants for converting string to numeric values
@@ -88,6 +89,29 @@ class ConfigParser:
             "fast_length": 3,
             "slow_length": 8,
             "signal_length": 2
+        }
+    }
+
+    EMA_PRESETS = {
+        "ultra_short": {
+            "ema_fast": 3,
+            "ema_slow": 10
+        },
+        "short": {
+            "ema_fast": 5,
+            "ema_slow": 20
+        },
+        "medium": {
+            "ema_fast": 8,
+            "ema_slow": 30
+        },
+        "long": {
+            "ema_fast": 12,
+            "ema_slow": 50
+        },
+        "ultra_long": {
+            "ema_fast": 20,
+            "ema_slow": 100
         }
     }
 
@@ -173,6 +197,9 @@ class ConfigParser:
         # Process MACD parameters
         processed_config = self._process_macd_parameters(processed_config)
 
+        # Process EMA parameters
+        processed_config = self._process_ema_parameters(processed_config)
+
         # Parse risk-reward ratio and calculate derived parameters
         parsed_config = self._parse_risk_reward_ratio(processed_config)
         final_config = self._calculate_derived_parameters(parsed_config)
@@ -198,6 +225,8 @@ class ConfigParser:
         # Check required parameters
         for param_name, (param_type, description) in cls.PARAMETER_SCHEMA.items():
             if param_name in ['fast_length', 'slow_length', 'signal_length'] and 'macd_preset' in config:
+                continue
+            if param_name in ['ema_fast', 'ema_slow'] and 'ema_preset' in config:
                 continue
             if param_name not in config:
                 errors.append(f"Missing required parameter: {param_name} - {description}")
@@ -234,6 +263,14 @@ class ConfigParser:
         if not has_all_macd_params and not has_macd_preset:
             errors.append(
                 "Missing MACD configuration: must specify either macd_preset or all MACD parameters (fast_length, slow_length, signal_length)")
+
+        # Check if we have either both EMA parameters or a preset
+        has_both_ema_params = all(param in config for param in ['ema_fast', 'ema_slow'])
+        has_ema_preset = 'ema_preset' in config
+
+        if not has_both_ema_params and not has_ema_preset:
+            errors.append(
+                "Missing EMA configuration: must specify either ema_preset or both EMA parameters (ema_fast, ema_slow)")
 
         return errors
 
@@ -321,6 +358,46 @@ class ConfigParser:
                         result[param] = value
 
                 result['macd_preset_str'] = "classic"
+
+        return result
+
+    @classmethod
+    def _process_ema_parameters(cls, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process EMA parameter sets from configuration
+
+        Args:
+            config: Configuration dictionary
+
+        Returns:
+            Updated configuration with processed EMA parameters
+        """
+        result = config.copy()
+
+        # Check if ema_preset is specified
+        if 'ema_preset' in result:
+            preset_name = result['ema_preset'].lower()
+
+            # Store original preset name
+            result['ema_preset_str'] = preset_name
+
+            # Check if preset exists
+            if preset_name in cls.EMA_PRESETS:
+                # Apply preset parameters (only if not explicitly defined)
+                preset = cls.EMA_PRESETS[preset_name]
+                for param, value in preset.items():
+                    if param not in result:
+                        result[param] = value
+
+                logger.info(f"Applied EMA preset '{preset_name}': {preset}")
+            else:
+                # Invalid preset name, log warning and use medium
+                logger.warning(f"Invalid EMA preset '{preset_name}', using 'medium'")
+                for param, value in cls.EMA_PRESETS["medium"].items():
+                    if param not in result:
+                        result[param] = value
+
+                result['ema_preset_str'] = "medium"
 
         return result
 

@@ -370,6 +370,25 @@ macd_preset: "delayed"
 fast_length: 10  # Override just the fast length
 ```
 
+### Simplified EMA Configuration
+
+The strategy offers predefined EMA parameter sets for trend detection:
+- `ultra_short`: Very fast response for scalping (Fast: 3, Slow: 10)
+- `short`: Quick response for short timeframes (Fast: 5, Slow: 20)
+- `medium`: Balanced settings for medium timeframes (Fast: 8, Slow: 30)
+- `long`: Longer term trend detection (Fast: 12, Slow: 50)
+- `ultra_long`: Very long term trend detection (Fast: 20, Slow: 100)
+
+Example configuration:
+```yaml
+# Use a preset
+ema_preset: "medium"
+
+# Or override specific parameters
+ema_preset: "long"
+ema_fast: 15  # Override just the fast length
+```
+
 ## Strategy Logic
 
 ### Entry Signals

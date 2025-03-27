@@ -25,6 +25,7 @@ def get_mock_config_data():
             "min_stoploss": -0.01,
             "max_stoploss": -0.03,
             "macd_preset": "responsive",
+            "ema_preset": "ultra_short",
             "adx_threshold": "strong",
             "ema_fast": 3,
             "ema_slow": 10
@@ -34,6 +35,7 @@ def get_mock_config_data():
             "min_stoploss": -0.0125,
             "max_stoploss": -0.0275,
             "macd_preset": "classic",
+            "ema_preset": "short",
             "adx_threshold": "normal",
             "ema_fast": 8,
             "ema_slow": 21
@@ -45,6 +47,7 @@ def get_mock_config_data():
             "fast_length": 12,
             "slow_length": 26,
             "signal_length": 9,
+            "ema_preset": "medium",
             "adx_threshold": "normal",
             "ema_fast": 8,
             "ema_slow": 21
@@ -54,10 +57,21 @@ def get_mock_config_data():
             "min_stoploss": -0.0125,
             "max_stoploss": -0.0275,
             "macd_preset": "delayed",
+            "ema_preset": "long",
             "fast_length": 10,
             "adx_threshold": "weak",
             "ema_fast": 8,
             "ema_slow": 21
+        },
+        "1h": {
+            "risk_reward_ratio": "1:2",
+            "min_stoploss": -0.0125,
+            "max_stoploss": -0.0275,
+            "macd_preset": "delayed",
+            "ema_preset": "ultra_long",
+            "adx_threshold": "weak",
+            "ema_fast": 20,
+            "ema_slow": 100
         },
         "global": {
             "counter_trend_factor": 0.5,

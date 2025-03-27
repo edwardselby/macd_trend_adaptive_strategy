@@ -10,6 +10,13 @@ All notable changes to this project will be documented in this file.
   - Renamed `normal` to `moderate` and adjusted values
   - Updated preset values to more evenly distributed thresholds (10/30/50/70/90)
   - Improved documentation and tests for all ADX threshold options
+- Introduced named EMA presets for easier configuration:
+  - "ultra_short": Very fast response for scalping (Fast: 3, Slow: 10)
+  - "short": Quick response for short timeframes (Fast: 5, Slow: 20)
+  - "medium": Balanced settings for medium timeframes (Fast: 8, Slow: 30)
+  - "long": Longer term trend detection (Fast: 12, Slow: 50)
+  - "ultra_long": Very long term trend detection (Fast: 20, Slow: 100)
+- Support for EMA preset overrides to customize individual parameters
 
 ## [0.7.0] - 2025-03-27
 

@@ -75,6 +75,12 @@ class StrategyConfig:
                 return f"{self.macd_preset_str} ({self.fast_length}/{self.slow_length}/{self.signal_length})"
             return f"Custom ({self.fast_length}/{self.slow_length}/{self.signal_length})"
 
+        # Helper function to get EMA description
+        def get_ema_description():
+            if hasattr(self, 'ema_preset_str'):
+                return f"{self.ema_preset_str} (Fast: {self.ema_fast}, Slow: {self.ema_slow})"
+            return f"Custom (Fast: {self.ema_fast}, Slow: {self.ema_slow})"
+
         # Build the configuration summary
         return (
             f"Strategy Configuration for {self.timeframe}:\n"
@@ -82,7 +88,7 @@ class StrategyConfig:
             f"- ROI: Min={self.min_roi:.2%}, Max={self.max_roi:.2%}, Base={self.base_roi:.2%}\n"
             f"- Stoploss: Min={self.min_stoploss:.2%}, Max={self.max_stoploss:.2%}\n"
             f"- MACD: {get_macd_description()}\n"
-            f"- Trend: ADX Threshold={get_adx_description()}, EMA Fast={self.ema_fast}, EMA Slow={self.ema_slow}\n"
+            f"- Trend: ADX Threshold={get_adx_description()}, EMA={get_ema_description()}\n"
             f"- Factors: Counter={self.counter_trend_factor:.2f}, Aligned={self.aligned_trend_factor:.2f}, "
             f"Counter SL={self.counter_trend_stoploss_factor:.2f}, Aligned SL={self.aligned_trend_stoploss_factor:.2f}\n"
         )

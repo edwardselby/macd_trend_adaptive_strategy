@@ -121,3 +121,27 @@ def test_strategy_config_with_override(mock_config_parser):
     summary = config.get_config_summary()
     override_info = f"MACD: {config.macd_preset_str} ({config.fast_length}/{config.slow_length}/{config.signal_length})"
     assert override_info in summary
+
+
+@pytest.mark.parametrize('timeframe,mode,expected_preset', [
+    ("5m", StrategyMode.TIMEFRAME_5M, "short"),
+    ("15m", StrategyMode.TIMEFRAME_15M, "medium"),
+    ("1h", StrategyMode.TIMEFRAME_1H, "ultra_long")
+])
+def test_strategy_config_with_ema_preset(mock_config_file, timeframe, mode, expected_preset):
+    """Test StrategyConfig initialization with EMA preset configurations"""
+    parser = ConfigParser(config_path=mock_config_file)
+
+    # Use explicit mode instead of AUTO
+    config = StrategyConfig(mode=mode, config_parser=parser)
+
+    # Verify timeframe matches the specified mode
+    assert config.timeframe == timeframe
+
+    # Verify EMA preset parameters were correctly applied
+    assert hasattr(config, 'ema_fast')
+    assert hasattr(config, 'ema_slow')
+
+    # Verify preset name was stored
+    assert hasattr(config, 'ema_preset_str')
+    assert config.ema_preset_str == expected_preset
