@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-03-27
+
+### Added
+- Introduced named MACD presets for easier configuration:
+  - "rapid": Ultra-fast response (3/8/2)
+  - "responsive": Quick response for short timeframes (5/13/3)
+  - "classic": Standard MACD settings (12/26/9)
+  - "conservative": Reduced noise for medium timeframes (8/21/5)
+  - "delayed": Slower response for higher timeframes (13/34/8)
+- Support for preset overrides to customize individual parameters
+
 ### Changed
 - Simplified ADX configuration:
   - Removed `adx_period` parameter and set to standard value of 14
@@ -11,6 +22,9 @@ All notable changes to this project will be documented in this file.
   - Added backward compatibility for numeric threshold values
 - Updated configuration validator to handle string-based ADX thresholds
 - Improved configuration summary display to show ADX threshold in human-readable format
+- Enhanced configuration parser to support MACD presets
+- Updated test suite to verify MACD preset functionality
+- Improved strategy configuration display with preset information
 - Code tidy up
 
 ## [0.6.0] - 2025-03-25
